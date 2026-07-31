@@ -1,0 +1,540 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Alerta P2P Binance</title>
+<meta name="description" content="Alerta sonora y visual cuando el precio P2P de Binance cruza el nivel que definas." />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" href="icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="icon.svg" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="theme-color" content="#0B0E11" />
+<style>
+  :root {
+    --bg: #0B0E11;
+    --card: #16191E;
+    --border: #262A31;
+    --text: #EAECEF;
+    --muted: #848E9C;
+    --accent: #F0B90B;
+    --green: #0ECB81;
+    --red: #F6465D;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  main { max-width: 480px; margin: 0 auto; padding: 20px 16px 40px; }
+  header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  h1 { font-size: 18px; margin: 0; font-weight: 700; }
+  .status-pill {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .status-pill.on .dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .status-pill.on { color: var(--green); border-color: var(--green); }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 16px; margin-bottom: 14px;
+  }
+  .price-card { text-align: center; padding: 24px 16px; }
+  .price-label { color: var(--muted); font-size: 13px; margin-bottom: 6px; }
+  .price-value { font-size: 40px; font-weight: 800; letter-spacing: -0.5px; }
+  .price-value .fiat { font-size: 16px; color: var(--muted); font-weight: 500; margin-left: 4px; }
+  .price-meta { margin-top: 10px; font-size: 12px; color: var(--muted); }
+
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; margin-top: 12px; }
+  label:first-child { margin-top: 0; }
+  select, input[type="number"], input[type="text"] {
+    width: 100%; background: #0B0E11; color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px; font-size: 15px;
+  }
+  .row { display: flex; gap: 10px; }
+  .row > div { flex: 1; }
+
+  .toggle-group { display: flex; gap: 8px; margin-top: 4px; }
+  .toggle-btn {
+    flex: 1; padding: 10px; text-align: center; border-radius: 8px; border: 1px solid var(--border);
+    background: #0B0E11; color: var(--muted); font-size: 13px; cursor: pointer; user-select: none;
+  }
+  .toggle-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(240,185,11,0.08); }
+  .hint { font-size: 11px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+
+  button.primary {
+    width: 100%; margin-top: 18px; padding: 14px; border: none; border-radius: 10px;
+    background: var(--accent); color: #0B0E11; font-weight: 700; font-size: 15px; cursor: pointer;
+  }
+  button.primary.stop { background: var(--red); color: #fff; }
+  button.secondary {
+    width: 100%; margin-top: 8px; padding: 10px; border-radius: 10px; border: 1px solid var(--border);
+    background: transparent; color: var(--text); font-size: 13px; cursor: pointer;
+  }
+  details summary { cursor: pointer; color: var(--muted); font-size: 12px; margin-top: 4px; }
+
+  .log { max-height: 140px; overflow-y: auto; font-size: 12px; color: var(--muted); font-family: ui-monospace, monospace; }
+  .log div { padding: 3px 0; border-bottom: 1px dashed var(--border); }
+
+  #alertBanner {
+    position: fixed; inset: 0; z-index: 999; display: none; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center; padding: 24px;
+    background: var(--red); color: #fff; animation: pulse 1s infinite;
+  }
+  #alertBanner.show { display: flex; }
+  #alertBanner .big { font-size: 46px; font-weight: 800; margin: 10px 0; }
+  #alertBanner .label { font-size: 15px; opacity: 0.9; }
+  #alertBanner button {
+    margin-top: 28px; padding: 14px 28px; border-radius: 10px; border: none;
+    background: #fff; color: var(--red); font-weight: 700; font-size: 15px;
+  }
+  @keyframes pulse {
+    0%, 100% { background: var(--red); }
+    50% { background: #a80f26; }
+  }
+  footer { margin-top: 18px; font-size: 11px; color: var(--muted); line-height: 1.5; text-align: center; }
+</style>
+</head>
+<body>
+
+<div id="alertBanner">
+  <div class="label">Alerta de precio P2P</div>
+  <div class="big" id="alertPrice">--</div>
+  <div class="label" id="alertDetail"></div>
+  <button id="dismissBtn">Silenciar alerta</button>
+</div>
+
+<main>
+  <header>
+    <h1>🔔 Alerta P2P Binance</h1>
+    <div class="status-pill" id="statusPill"><span class="dot"></span><span id="statusText">Detenido</span></div>
+  </header>
+
+  <div class="card price-card">
+    <div class="price-label" id="priceLabel">Precio de venta USDT/VES</div>
+    <div class="price-value"><span id="priceValue">--</span><span class="fiat" id="priceFiat">VES</span></div>
+    <div class="price-meta" id="priceMeta">Sin datos todavía</div>
+  </div>
+
+  <div class="card">
+    <label for="asset">Criptoactivo</label>
+    <div class="row">
+      <div>
+        <select id="asset">
+          <option value="USDT">USDT</option>
+          <option value="USDC">USDC</option>
+          <option value="BTC">BTC</option>
+          <option value="ETH">ETH</option>
+          <option value="BNB">BNB</option>
+        </select>
+      </div>
+      <div>
+        <select id="fiat">
+          <option value="VES">VES - Bolívares</option>
+          <option value="COP">COP - Pesos COL</option>
+          <option value="ARS">ARS - Pesos ARG</option>
+          <option value="PEN">PEN - Soles</option>
+          <option value="CLP">CLP - Pesos CHI</option>
+          <option value="MXN">MXN - Pesos MEX</option>
+          <option value="BRL">BRL - Reales</option>
+          <option value="USD">USD - Dólares</option>
+          <option value="EUR">EUR - Euros</option>
+        </select>
+      </div>
+    </div>
+
+    <label>¿Qué quieres hacer?</label>
+    <div class="toggle-group" id="tradeTypeGroup">
+      <div class="toggle-btn active" data-value="SELL">Comprar (ver precio de venta)</div>
+      <div class="toggle-btn" data-value="BUY">Vender (ver precio de compra)</div>
+    </div>
+    <div class="hint">"Comprar" muestra el precio al que los anunciantes están <b>vendiendo</b> (lo que pagarías). "Vender" muestra el precio al que los anunciantes están <b>comprando</b> (lo que te pagarían).</div>
+
+    <label for="threshold">Nivel de alerta</label>
+    <input type="number" id="threshold" placeholder="Ej: 245.00" step="0.01" />
+
+    <label>Avisarme cuando el precio...</label>
+    <div class="toggle-group" id="conditionGroup">
+      <div class="toggle-btn active" data-value="below">Baje de ese nivel</div>
+      <div class="toggle-btn" data-value="above">Suba de ese nivel</div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label for="interval">Revisar cada</label>
+        <select id="interval">
+          <option value="15">15 segundos</option>
+          <option value="30" selected>30 segundos</option>
+          <option value="60">1 minuto</option>
+          <option value="120">2 minutos</option>
+        </select>
+      </div>
+      <div>
+        <label for="snooze">Repetir alerta cada</label>
+        <select id="snooze">
+          <option value="2">2 min</option>
+          <option value="5" selected>5 min</option>
+          <option value="10">10 min</option>
+          <option value="0">Solo una vez</option>
+        </select>
+      </div>
+    </div>
+
+    <details>
+      <summary>Opciones avanzadas</summary>
+      <label for="apiBase">Endpoint del proxy (Firebase Function)</label>
+      <input type="text" id="apiBase" placeholder="https://us-central1-TU-PROYECTO.cloudfunctions.net/binanceP2PProxy" />
+    </details>
+
+    <button class="primary" id="toggleBtn">Iniciar monitoreo</button>
+    <button class="secondary" id="testBtn">Probar sonido y vibración</button>
+  </div>
+
+  <div class="card">
+    <label style="margin-top:0">Historial reciente</label>
+    <div class="log" id="log"><div>Aún no hay lecturas.</div></div>
+  </div>
+
+  <footer>
+    Esta página revisa el precio mientras la mantengas abierta en el navegador de tu teléfono.
+    Se pedirá permiso de notificaciones y se intentará mantener la pantalla encendida mientras el monitoreo está activo.
+    Los sistemas operativos móviles pueden pausar la pestaña si cambias de app o bloqueas el teléfono, así que para máxima confiabilidad deja la pantalla encendida con esta página al frente.
+  </footer>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var DEFAULT_API_BASE = "";
+  var STORAGE_KEY = "binanceAlertConfig.v1";
+
+  var els = {
+    asset: document.getElementById("asset"),
+    fiat: document.getElementById("fiat"),
+    tradeTypeGroup: document.getElementById("tradeTypeGroup"),
+    conditionGroup: document.getElementById("conditionGroup"),
+    threshold: document.getElementById("threshold"),
+    interval: document.getElementById("interval"),
+    snooze: document.getElementById("snooze"),
+    apiBase: document.getElementById("apiBase"),
+    toggleBtn: document.getElementById("toggleBtn"),
+    testBtn: document.getElementById("testBtn"),
+    statusPill: document.getElementById("statusPill"),
+    statusText: document.getElementById("statusText"),
+    priceLabel: document.getElementById("priceLabel"),
+    priceValue: document.getElementById("priceValue"),
+    priceFiat: document.getElementById("priceFiat"),
+    priceMeta: document.getElementById("priceMeta"),
+    log: document.getElementById("log"),
+    alertBanner: document.getElementById("alertBanner"),
+    alertPrice: document.getElementById("alertPrice"),
+    alertDetail: document.getElementById("alertDetail"),
+    dismissBtn: document.getElementById("dismissBtn"),
+  };
+
+  function loadConfig() {
+    var saved = {};
+    try { saved = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; } catch (e) {}
+    return Object.assign({
+      asset: "USDT",
+      fiat: "VES",
+      tradeType: "SELL",
+      condition: "below",
+      threshold: "",
+      intervalSec: 30,
+      snoozeMin: 5,
+      apiBase: DEFAULT_API_BASE,
+    }, saved);
+  }
+
+  function saveConfig() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+  }
+
+  var config = loadConfig();
+
+  function applyConfigToForm() {
+    els.asset.value = config.asset;
+    els.fiat.value = config.fiat;
+    els.threshold.value = config.threshold || "";
+    els.interval.value = String(config.intervalSec);
+    els.snooze.value = String(config.snoozeMin);
+    els.apiBase.value = config.apiBase;
+    setActiveToggle(els.tradeTypeGroup, config.tradeType);
+    setActiveToggle(els.conditionGroup, config.condition);
+    updatePriceLabel();
+  }
+
+  function setActiveToggle(group, value) {
+    Array.prototype.forEach.call(group.children, function (btn) {
+      btn.classList.toggle("active", btn.dataset.value === value);
+    });
+  }
+
+  function getActiveToggle(group) {
+    var active = group.querySelector(".active");
+    return active ? active.dataset.value : null;
+  }
+
+  function updatePriceLabel() {
+    var action = config.tradeType === "SELL" ? "venta" : "compra";
+    els.priceLabel.textContent = "Precio de " + action + " " + config.asset + "/" + config.fiat;
+    els.priceFiat.textContent = config.fiat;
+  }
+
+  [els.tradeTypeGroup, els.conditionGroup].forEach(function (group) {
+    group.addEventListener("click", function (e) {
+      var btn = e.target.closest(".toggle-btn");
+      if (!btn) return;
+      setActiveToggle(group, btn.dataset.value);
+      config.tradeType = getActiveToggle(els.tradeTypeGroup);
+      config.condition = getActiveToggle(els.conditionGroup);
+      updatePriceLabel();
+      saveConfig();
+    });
+  });
+
+  [els.asset, els.fiat, els.interval, els.snooze, els.apiBase].forEach(function (el) {
+    el.addEventListener("change", function () {
+      config.asset = els.asset.value;
+      config.fiat = els.fiat.value;
+      config.intervalSec = parseInt(els.interval.value, 10);
+      config.snoozeMin = parseInt(els.snooze.value, 10);
+      config.apiBase = els.apiBase.value.trim() || DEFAULT_API_BASE;
+      updatePriceLabel();
+      saveConfig();
+    });
+  });
+
+  els.threshold.addEventListener("input", function () {
+    config.threshold = els.threshold.value;
+    saveConfig();
+  });
+
+  applyConfigToForm();
+
+  // ── Audio + vibration ──────────────────────────────────────────────
+  var audioCtx = null;
+  function ensureAudioCtx() {
+    if (!audioCtx) {
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new Ctx();
+    }
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    return audioCtx;
+  }
+
+  function playBeep() {
+    try {
+      var ctx = ensureAudioCtx();
+      var now = ctx.currentTime;
+      [0, 0.25, 0.5].forEach(function (offset) {
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.type = "square";
+        osc.frequency.value = 880;
+        gain.gain.setValueAtTime(0.0001, now + offset);
+        gain.gain.exponentialRampToValueAtTime(0.35, now + offset + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.2);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(now + offset);
+        osc.stop(now + offset + 0.22);
+      });
+    } catch (e) { /* Web Audio unavailable */ }
+  }
+
+  function vibrate() {
+    if (navigator.vibrate) {
+      try { navigator.vibrate([200, 100, 200, 100, 400]); } catch (e) {}
+    }
+  }
+
+  // ── Notifications ───────────────────────────────────────────────────
+  function requestNotificationPermission() {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  }
+
+  function showNotification(title, body) {
+    if ("Notification" in window && Notification.permission === "granted") {
+      try { new Notification(title, { body: body, icon: "icon-192.png" }); } catch (e) {}
+    }
+  }
+
+  // ── Wake Lock ────────────────────────────────────────────────────────
+  var wakeLock = null;
+  function requestWakeLock() {
+    if ("wakeLock" in navigator) {
+      navigator.wakeLock.request("screen").then(function (lock) {
+        wakeLock = lock;
+      }).catch(function () { /* ignore, e.g. denied or unsupported */ });
+    }
+  }
+  function releaseWakeLock() {
+    if (wakeLock) { wakeLock.release().catch(function () {}); wakeLock = null; }
+  }
+  document.addEventListener("visibilitychange", function () {
+    if (state.monitoring && document.visibilityState === "visible" && !wakeLock) {
+      requestWakeLock();
+    }
+  });
+
+  // ── Monitoring state machine ────────────────────────────────────────
+  var state = {
+    monitoring: false,
+    timerId: null,
+    alerting: false,
+    alertLoopId: null,
+    lastAlertAt: 0,
+  };
+
+  function log(msg) {
+    var line = document.createElement("div");
+    var time = new Date().toLocaleTimeString();
+    line.textContent = "[" + time + "] " + msg;
+    els.log.insertBefore(line, els.log.firstChild);
+    while (els.log.children.length > 30) els.log.removeChild(els.log.lastChild);
+  }
+
+  function setStatus(on, text) {
+    els.statusPill.classList.toggle("on", on);
+    els.statusText.textContent = text;
+  }
+
+  function buildUrl() {
+    var base = config.apiBase || DEFAULT_API_BASE;
+    var params = new URLSearchParams({
+      asset: config.asset,
+      fiat: config.fiat,
+      tradeType: config.tradeType,
+      rows: "5",
+    });
+    return base + "?" + params.toString();
+  }
+
+  function conditionMet(price, threshold) {
+    return config.condition === "below" ? price <= threshold : price >= threshold;
+  }
+
+  function checkPrice() {
+    fetch(buildUrl())
+      .then(function (res) {
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return res.json();
+      })
+      .then(function (data) {
+        if (data.bestPrice == null) {
+          log("Sin anuncios disponibles para " + config.asset + "/" + config.fiat);
+          return;
+        }
+        var price = data.bestPrice;
+        els.priceValue.textContent = price.toFixed(2);
+        els.priceMeta.textContent = "Actualizado " + new Date().toLocaleTimeString();
+        log(config.asset + "/" + config.fiat + " (" + config.tradeType + "): " + price.toFixed(2));
+
+        var threshold = parseFloat(config.threshold);
+        if (!isNaN(threshold) && conditionMet(price, threshold)) {
+          maybeTriggerAlert(price, threshold);
+        }
+      })
+      .catch(function (err) {
+        log("Error consultando precio: " + err.message);
+        els.priceMeta.textContent = "Error de conexión";
+      });
+  }
+
+  function maybeTriggerAlert(price, threshold) {
+    var snoozeMs = config.snoozeMin * 60 * 1000;
+    var now = Date.now();
+    if (state.alerting) return;
+    if (snoozeMs > 0 && state.lastAlertAt && now - state.lastAlertAt < snoozeMs) return;
+    if (config.snoozeMin === 0 && state.lastAlertAt) return; // "solo una vez" per monitoring session
+    triggerAlert(price, threshold);
+  }
+
+  function triggerAlert(price, threshold) {
+    state.alerting = true;
+    state.lastAlertAt = Date.now();
+    var action = config.tradeType === "SELL" ? "venta" : "compra";
+    var direction = config.condition === "below" ? "bajó de" : "subió de";
+    els.alertPrice.textContent = price.toFixed(2) + " " + config.fiat;
+    els.alertDetail.textContent = "El precio de " + action + " de " + config.asset + "/" + config.fiat + " " + direction + " " + threshold.toFixed(2);
+    els.alertBanner.classList.add("show");
+
+    playBeep();
+    vibrate();
+    showNotification("Alerta P2P Binance", els.alertDetail.textContent);
+
+    state.alertLoopId = setInterval(function () {
+      playBeep();
+      vibrate();
+    }, 4000);
+  }
+
+  function dismissAlert() {
+    state.alerting = false;
+    els.alertBanner.classList.remove("show");
+    if (state.alertLoopId) { clearInterval(state.alertLoopId); state.alertLoopId = null; }
+  }
+
+  els.dismissBtn.addEventListener("click", dismissAlert);
+
+  function startMonitoring() {
+    var threshold = parseFloat(config.threshold);
+    if (isNaN(threshold)) {
+      alert("Ingresa un nivel de precio válido antes de iniciar.");
+      return;
+    }
+    if (!config.apiBase) {
+      alert("Primero configura el endpoint del proxy en 'Opciones avanzadas' (la URL de tu Firebase Function, ver README).");
+      return;
+    }
+    ensureAudioCtx();
+    requestNotificationPermission();
+    requestWakeLock();
+    state.monitoring = true;
+    state.lastAlertAt = 0;
+    setStatus(true, "Monitoreando");
+    els.toggleBtn.textContent = "Detener monitoreo";
+    els.toggleBtn.classList.add("stop");
+    checkPrice();
+    state.timerId = setInterval(checkPrice, config.intervalSec * 1000);
+    log("Monitoreo iniciado: alerta cuando " + config.asset + "/" + config.fiat + " " + (config.condition === "below" ? "baje de" : "suba de") + " " + threshold);
+  }
+
+  function stopMonitoring() {
+    state.monitoring = false;
+    if (state.timerId) { clearInterval(state.timerId); state.timerId = null; }
+    releaseWakeLock();
+    dismissAlert();
+    setStatus(false, "Detenido");
+    els.toggleBtn.textContent = "Iniciar monitoreo";
+    els.toggleBtn.classList.remove("stop");
+    log("Monitoreo detenido.");
+  }
+
+  els.toggleBtn.addEventListener("click", function () {
+    if (state.monitoring) stopMonitoring(); else startMonitoring();
+  });
+
+  els.testBtn.addEventListener("click", function () {
+    ensureAudioCtx();
+    requestNotificationPermission();
+    playBeep();
+    vibrate();
+    showNotification("Prueba de alerta", "Así se verá y sonará tu alerta.");
+  });
+})();
+</script>
+</body>
+</html>
