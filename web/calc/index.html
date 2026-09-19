@@ -1,0 +1,833 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ciclos de Arbitraje USDT</title>
+<meta name="description" content="Calculadora de arbitraje USDT: capital, precio de venta, precio de recompra y número de ciclos, con ganancia bruta y neta acumulada.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Arbitraje">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#e9edf2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b0d10" media="(prefers-color-scheme: dark)">
+<style>
+  /* Base que el contenedor de Artifacts aportaba; aquí la declaramos nosotros. */
+  :root {
+    color-scheme: light dark;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  html, body { margin: 0; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+  :root {
+    --plane:       #e9edf2;
+    --surface:     #fbfcfd;
+    --surface-2:   #f2f5f9;
+    --ink:         #101419;
+    --ink-2:       #4d5662;
+    --ink-muted:   #7e8894;
+    --rule:        #dde3ea;
+    --rule-strong: #c4ccd6;
+    --grid:        #e3e8ee;
+    --axis:        #c4ccd6;
+    --bruta:       #2a78d6;
+    --bruta-soft:  rgba(42,120,214,0.13);
+    --neta:        #eb6834;
+    --neta-soft:   rgba(235,104,52,0.12);
+    --good:        #0ca30c;
+    --good-ink:    #056b05;
+    --critical:    #d03b3b;
+    --crit-ink:    #a32222;
+    --crit-soft:   rgba(208,59,59,0.10);
+    --focus:       #2a78d6;
+    --shadow:      0 1px 2px rgba(16,20,25,0.05), 0 8px 24px -16px rgba(16,20,25,0.28);
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --plane:       #0b0d10;
+      --surface:     #171a1e;
+      --surface-2:   #1f232a;
+      --ink:         #f2f5f8;
+      --ink-2:       #b7bfca;
+      --ink-muted:   #868f9c;
+      --rule:        #272c33;
+      --rule-strong: #39404a;
+      --grid:        #24282e;
+      --axis:        #39404a;
+      --bruta:       #3987e5;
+      --bruta-soft:  rgba(57,135,229,0.17);
+      --neta:        #d95926;
+      --neta-soft:   rgba(217,89,38,0.16);
+      --good:        #0ca30c;
+      --good-ink:    #35c035;
+      --critical:    #d03b3b;
+      --crit-ink:    #ef6b6b;
+      --crit-soft:   rgba(208,59,59,0.15);
+      --focus:       #3987e5;
+      --shadow:      0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -16px rgba(0,0,0,0.8);
+    }
+  }
+  :root[data-theme="dark"] {
+    --plane:       #0b0d10;
+    --surface:     #171a1e;
+    --surface-2:   #1f232a;
+    --ink:         #f2f5f8;
+    --ink-2:       #b7bfca;
+    --ink-muted:   #868f9c;
+    --rule:        #272c33;
+    --rule-strong: #39404a;
+    --grid:        #24282e;
+    --axis:        #39404a;
+    --bruta:       #3987e5;
+    --bruta-soft:  rgba(57,135,229,0.17);
+    --neta:        #d95926;
+    --neta-soft:   rgba(217,89,38,0.16);
+    --good:        #0ca30c;
+    --good-ink:    #35c035;
+    --critical:    #d03b3b;
+    --crit-ink:    #ef6b6b;
+    --crit-soft:   rgba(208,59,59,0.15);
+    --focus:       #3987e5;
+    --shadow:      0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -16px rgba(0,0,0,0.8);
+  }
+
+  body {
+    background: var(--plane);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding-inline: 20px;
+    padding-block: 28px 56px;
+  }
+  *:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+
+  /* ---- header ---- */
+  .masthead { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px 24px; margin-bottom: 22px; }
+  .masthead h1 {
+    font-size: clamp(22px, 3.4vw, 30px); font-weight: 700; letter-spacing: -0.018em;
+    margin: 0; text-wrap: balance; line-height: 1.15;
+  }
+  .masthead p { margin: 4px 0 0; color: var(--ink-2); font-size: 14px; max-width: 60ch; }
+  .eyebrow {
+    font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: 0.13em;
+    text-transform: uppercase; color: var(--ink-muted); display: block; margin-bottom: 6px;
+  }
+  .verdict {
+    margin-left: auto; display: inline-flex; align-items: center; gap: 8px;
+    font-size: 13px; font-weight: 600; padding: 7px 13px 7px 11px; border-radius: 999px;
+    border: 1px solid var(--rule-strong); background: var(--surface); white-space: nowrap;
+  }
+  .verdict .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ink-muted); flex: none; }
+  .verdict[data-state="good"] { color: var(--good-ink); border-color: color-mix(in srgb, var(--good) 40%, var(--rule)); }
+  .verdict[data-state="good"] .dot { background: var(--good); }
+  .verdict[data-state="bad"] { color: var(--crit-ink); border-color: color-mix(in srgb, var(--critical) 42%, var(--rule)); background: var(--crit-soft); }
+  .verdict[data-state="bad"] .dot { background: var(--critical); }
+
+  /* ---- KPI rail ---- */
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--rule);
+          border: 1px solid var(--rule); border-radius: 12px; overflow: hidden; margin-bottom: 22px; }
+  .kpi { background: var(--surface); padding: 15px 17px 16px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .kpi .k-label {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 500; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--ink-muted);
+  }
+  .kpi .k-value {
+    font-family: var(--mono); font-weight: 600; font-size: clamp(20px, 2.6vw, 27px);
+    letter-spacing: -0.02em; line-height: 1.18; overflow-wrap: anywhere;
+  }
+  .kpi .k-unit { font-size: 0.55em; font-weight: 500; color: var(--ink-muted); margin-left: 3px; }
+  .kpi .k-sub { font-size: 12.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .kpi.is-bruta .k-value { color: var(--bruta); }
+  .kpi.is-neta  .k-value { color: var(--neta); }
+  .kpi.is-total { background: var(--surface-2); box-shadow: inset 3px 0 0 var(--neta); }
+  .kpi.is-total .k-value { font-size: clamp(22px, 3vw, 31px); }
+  .neg { color: var(--crit-ink) !important; }
+
+  /* ---- main grid ---- */
+  .panel { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 18px; align-items: start; }
+  .card { background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; box-shadow: var(--shadow); }
+  .card > h2 {
+    font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: 0.13em;
+    text-transform: uppercase; color: var(--ink-muted); margin: 0;
+    padding: 14px 18px 12px; border-bottom: 1px solid var(--rule);
+  }
+
+  /* ---- sliders ---- */
+  .controls { padding: 4px 18px 18px; display: flex; flex-direction: column; }
+  .ctl { padding: 15px 0; border-bottom: 1px dashed var(--rule); }
+  .ctl:last-child { border-bottom: 0; padding-bottom: 4px; }
+  .ctl-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 11px; }
+  .ctl-head label { font-size: 13.5px; font-weight: 600; flex: 1; min-width: 0; }
+  .ctl-head .hint { display: block; font-weight: 400; font-size: 11.5px; color: var(--ink-muted); margin-top: 1px; }
+  .num {
+    font-family: var(--mono); font-size: 15px; font-weight: 600; color: var(--ink);
+    width: 8.4ch; text-align: right; padding: 5px 7px; border-radius: 6px;
+    border: 1px solid var(--rule-strong); background: var(--surface-2);
+    font-variant-numeric: tabular-nums; flex: none;
+  }
+  .num::-webkit-outer-spin-button, .num::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .num { -moz-appearance: textfield; }
+  input[type="range"] {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 22px; background: transparent;
+    display: block; cursor: grab; margin: 0;
+  }
+  input[type="range"]:active { cursor: grabbing; }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 5px; border-radius: 3px;
+    background: linear-gradient(to right, var(--accent) 0 var(--pct, 0%), var(--rule) var(--pct, 0%) 100%);
+  }
+  input[type="range"]::-moz-range-track { height: 5px; border-radius: 3px; background: var(--rule); }
+  input[type="range"]::-moz-range-progress { height: 5px; border-radius: 3px; background: var(--accent); }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 19px; height: 19px; border-radius: 50%;
+    background: var(--surface); border: 2.5px solid var(--accent); margin-top: -7px;
+    box-shadow: 0 1px 3px rgba(16,20,25,0.28);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 15px; height: 15px; border-radius: 50%; background: var(--surface);
+    border: 2.5px solid var(--accent); box-shadow: 0 1px 3px rgba(16,20,25,0.28);
+  }
+  .scale {
+    display: flex; justify-content: space-between; font-family: var(--mono);
+    font-size: 10.5px; color: var(--ink-muted); margin-top: 3px; font-variant-numeric: tabular-nums;
+  }
+  .ctl[data-accent="capital"] { --accent: var(--ink-2); }
+  .ctl[data-accent="venta"]   { --accent: var(--bruta); }
+  .ctl[data-accent="compra"]  { --accent: var(--neta); }
+  .ctl[data-accent="ciclos"]  { --accent: var(--ink-2); }
+
+  .spread-readout {
+    margin-top: 14px; padding: 11px 13px; border-radius: 8px; background: var(--surface-2);
+    border: 1px solid var(--rule); display: flex; flex-direction: column; gap: 2px;
+  }
+  .spread-readout .sr-label {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 500; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--ink-muted);
+  }
+  .spread-readout .sr-val {
+    font-family: var(--mono); font-weight: 600; font-size: 16px;
+    font-variant-numeric: tabular-nums; letter-spacing: -0.01em;
+  }
+
+  /* ---- chart ---- */
+  .chart-card { display: flex; flex-direction: column; min-width: 0; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 20px; padding: 13px 18px 0; }
+  .lg { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--ink-2); }
+  .lg .swatch { width: 15px; height: 3px; border-radius: 2px; flex: none; }
+  .lg .swatch.area { height: 11px; border-radius: 2px; border: 1px solid var(--rule-strong); }
+  .chart-host { position: relative; padding: 6px 4px 4px; min-width: 0; }
+  .chart-host svg { display: block; width: 100%; height: auto; }
+  .tip {
+    position: absolute; pointer-events: none; opacity: 0; transition: opacity .12s;
+    background: var(--surface); border: 1px solid var(--rule-strong); border-radius: 8px;
+    box-shadow: var(--shadow); padding: 9px 11px; font-size: 12.5px; min-width: 146px; z-index: 3;
+  }
+  .tip[data-on="1"] { opacity: 1; }
+  .tip .t-head {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--ink-muted); margin-bottom: 6px;
+  }
+  .tip .t-row { display: flex; align-items: center; gap: 7px; justify-content: space-between; }
+  .tip .t-row + .t-row { margin-top: 3px; }
+  .tip .t-name { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2); }
+  .tip .t-dot { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+  .tip .t-num { font-family: var(--mono); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  .note { padding: 2px 18px 16px; font-size: 12.5px; color: var(--ink-muted); }
+  details.table-view { border-top: 1px solid var(--rule); }
+  details.table-view > summary {
+    cursor: pointer; padding: 12px 18px; font-size: 12.5px; font-weight: 600; color: var(--ink-2);
+    list-style: none; display: flex; align-items: center; gap: 7px;
+  }
+  details.table-view > summary::-webkit-details-marker { display: none; }
+  details.table-view > summary::before { content: "▸"; font-size: 10px; color: var(--ink-muted); }
+  details.table-view[open] > summary::before { content: "▾"; }
+  .table-scroll { overflow-x: auto; max-height: 300px; overflow-y: auto; border-top: 1px solid var(--rule); }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { padding: 7px 18px; text-align: right; font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+  th {
+    position: sticky; top: 0; background: var(--surface-2); color: var(--ink-muted);
+    font-weight: 500; font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase;
+    border-bottom: 1px solid var(--rule);
+  }
+  th:first-child, td:first-child { text-align: left; }
+  tbody tr:nth-child(even) { background: var(--surface-2); }
+
+  .formulas { margin-top: 20px; }
+  .formulas .fx { padding: 15px 18px; display: grid; gap: 13px; }
+  .fx-row { display: grid; gap: 4px; }
+  .fx-row .fx-name { font-size: 12.5px; font-weight: 600; }
+  .fx-row code {
+    font-family: var(--mono); font-size: 12.5px; color: var(--ink-2); background: var(--surface-2);
+    border: 1px solid var(--rule); border-radius: 6px; padding: 7px 10px; display: block;
+    overflow-x: auto; white-space: nowrap;
+  }
+
+  @media (max-width: 900px) {
+    .panel { grid-template-columns: 1fr; }
+    .kpis { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 460px) {
+    .kpis { grid-template-columns: 1fr; }
+    .verdict { margin-left: 0; }
+    th, td { padding-inline: 14px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+  }
+</style>
+<style>
+  /* Barra de instalación: solo aparece cuando la app se puede instalar. */
+  .install-bar {
+    position: sticky; bottom: 0; z-index: 20;
+    margin: 22px -20px calc(-56px + env(safe-area-inset-bottom, 0px));
+    padding: 13px 20px calc(13px + env(safe-area-inset-bottom, 0px));
+    background: var(--surface); border-top: 1px solid var(--rule);
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    box-shadow: 0 -6px 20px -14px rgba(16,20,25,0.45);
+  }
+  .install-bar p { margin: 0; font-size: 13px; color: var(--ink-2); flex: 1; min-width: 180px; }
+  .install-bar button {
+    font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer;
+    padding: 9px 16px; border-radius: 8px; border: 1px solid transparent;
+    background: var(--bruta); color: #fff;
+  }
+  .install-bar button.ghost { background: transparent; color: var(--ink-2); border-color: var(--rule-strong); }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div>
+      <span class="eyebrow">Arbitraje P2P · USDT</span>
+      <h1>Ciclos de Arbitraje USDT</h1>
+      <p>Vende a <strong>T<sub>v</sub></strong>, recompra a <strong>T<sub>c</sub></strong>, repite. Mueve cualquier variable y el panel, el gráfico y la tabla se recalculan al instante.</p>
+    </div>
+    <div class="verdict" id="verdict" data-state="good" role="status">
+      <span class="dot"></span><span id="verdictText">Operación rentable</span>
+    </div>
+  </header>
+
+  <section class="kpis" aria-label="Resumen">
+    <div class="kpi">
+      <span class="k-label">Capital configurado</span>
+      <span class="k-value" id="kCapital">1.000<span class="k-unit">USDT</span></span>
+      <span class="k-sub" id="kCapitalSub">por ciclo</span>
+    </div>
+    <div class="kpi is-bruta">
+      <span class="k-label">Utilidad bruta / ciclo</span>
+      <span class="k-value" id="kBruta">—<span class="k-unit">USDT</span></span>
+      <span class="k-sub" id="kBrutaSub">—</span>
+    </div>
+    <div class="kpi is-neta">
+      <span class="k-label">Utilidad neta / ciclo</span>
+      <span class="k-value" id="kNeta">—<span class="k-unit">USDT</span></span>
+      <span class="k-sub" id="kNetaSub">—</span>
+    </div>
+    <div class="kpi is-total">
+      <span class="k-label">Ganancia neta total</span>
+      <span class="k-value" id="kTotal">—<span class="k-unit">USDT</span></span>
+      <span class="k-sub" id="kTotalSub">—</span>
+    </div>
+  </section>
+
+  <div class="panel">
+
+    <section class="card">
+      <h2>Variables</h2>
+      <div class="controls">
+
+        <div class="ctl" data-accent="capital">
+          <div class="ctl-head">
+            <label for="capital">Capital inicial por ciclo<span class="hint">USDT que entran en cada operación</span></label>
+            <input class="num" id="capitalNum" type="number" min="100" max="10000" step="50" value="1000" aria-label="Capital inicial por ciclo en USDT">
+          </div>
+          <input type="range" id="capital" min="100" max="10000" step="50" value="1000">
+          <div class="scale"><span>100</span><span>10.000</span></div>
+        </div>
+
+        <div class="ctl" data-accent="venta">
+          <div class="ctl-head">
+            <label for="venta">Precio de venta · T<sub>v</sub><span class="hint">Tasa a la que vendes el USDT</span></label>
+            <input class="num" id="ventaNum" type="number" min="100" max="10000" step="0.1" value="320" aria-label="Precio de venta">
+          </div>
+          <input type="range" id="venta" min="100" max="10000" step="0.1" value="320">
+          <div class="scale"><span>100</span><span>10.000</span></div>
+        </div>
+
+        <div class="ctl" data-accent="compra">
+          <div class="ctl-head">
+            <label for="compra">Precio de recompra · T<sub>c</sub><span class="hint">Tasa a la que recompras el USDT</span></label>
+            <input class="num" id="compraNum" type="number" min="100" max="10000" step="0.1" value="312" aria-label="Precio de recompra">
+          </div>
+          <input type="range" id="compra" min="100" max="10000" step="0.1" value="312">
+          <div class="scale"><span>100</span><span>10.000</span></div>
+        </div>
+
+        <div class="ctl" data-accent="ciclos">
+          <div class="ctl-head">
+            <label for="ciclos">Cantidad de ciclos · N<span class="hint">Operaciones completas a repetir</span></label>
+            <input class="num" id="ciclosNum" type="number" min="1" max="50" step="1" value="12" aria-label="Cantidad de ciclos">
+          </div>
+          <input type="range" id="ciclos" min="1" max="50" step="1" value="12">
+          <div class="scale"><span>1</span><span>50</span></div>
+        </div>
+
+        <div class="spread-readout">
+          <span class="sr-label">Diferencial Tv − Tc</span>
+          <span class="sr-val" id="srSpread">—</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="card chart-card">
+      <h2>Ganancia acumulada por ciclo</h2>
+      <div class="legend">
+        <span class="lg"><span class="swatch area" style="background: var(--bruta-soft); border-color: var(--bruta);"></span> Ganancia bruta acumulada</span>
+        <span class="lg"><span class="swatch" style="background: var(--neta);"></span> Ganancia neta acumulada</span>
+      </div>
+      <div class="chart-host" id="chartHost">
+        <svg id="chart" role="img" aria-labelledby="chartDesc"><desc id="chartDesc">Gráfico de ganancia acumulada en USDT frente al número de ciclos.</desc></svg>
+        <div class="tip" id="tip" aria-hidden="true"></div>
+      </div>
+      <p class="note" id="chartNote">La franja azul sobre la línea naranja es lo que se llevan las comisiones.</p>
+      <details class="table-view">
+        <summary>Ver la tabla ciclo por ciclo</summary>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th scope="col">Ciclo</th><th scope="col">Bruta acum.</th><th scope="col">Neta acum.</th><th scope="col">Comisiones acum.</th></tr></thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+      </details>
+    </section>
+  </div>
+
+  <section class="card formulas">
+    <h2>Fórmulas aplicadas</h2>
+    <div class="fx">
+      <div class="fx-row">
+        <span class="fx-name">Rendimiento bruto por ciclo</span>
+        <code>Capital × (T_v − T_c) / T_c</code>
+      </div>
+      <div class="fx-row">
+        <span class="fx-name">Rendimiento neto por ciclo · comisiones P2P 0,4 %</span>
+        <code>Capital × ((T_v × 0,998) − (T_c × 1,002)) / (T_c × 1,002)</code>
+      </div>
+      <div class="fx-row">
+        <span class="fx-name">Acumulado a N ciclos</span>
+        <code>Ganancia por ciclo × N</code>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="install-bar" id="installBar" hidden>
+  <p id="installText">Instálala en tu pantalla de inicio para abrirla de un toque, incluso sin conexión.</p>
+  <button type="button" id="installBtn">Instalar</button>
+  <button type="button" class="ghost" id="installDismiss">Ahora no</button>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var FEE_SELL = 0.998, FEE_BUY = 1.002;
+  var nf = function (n, d) {
+    return new Intl.NumberFormat("es-VE", { minimumFractionDigits: d, maximumFractionDigits: d }).format(n);
+  };
+  var money = function (n) { return nf(n, 2); };
+  var signed = function (n, d) { return (n > 0 ? "+" : "") + nf(n, d === undefined ? 2 : d); };
+
+  var ids = ["capital", "venta", "compra", "ciclos"];
+  var R = {}, Nm = {};
+  ids.forEach(function (k) { R[k] = document.getElementById(k); Nm[k] = document.getElementById(k + "Num"); });
+
+  var el = {
+    kCapital: document.getElementById("kCapital"), kCapitalSub: document.getElementById("kCapitalSub"),
+    kBruta: document.getElementById("kBruta"), kBrutaSub: document.getElementById("kBrutaSub"),
+    kNeta: document.getElementById("kNeta"), kNetaSub: document.getElementById("kNetaSub"),
+    kTotal: document.getElementById("kTotal"), kTotalSub: document.getElementById("kTotalSub"),
+    srSpread: document.getElementById("srSpread"),
+    verdict: document.getElementById("verdict"), verdictText: document.getElementById("verdictText"),
+    tbody: document.getElementById("tbody"), svg: document.getElementById("chart"),
+    host: document.getElementById("chartHost"), tip: document.getElementById("tip"),
+    note: document.getElementById("chartNote")
+  };
+
+  var state = { capital: 1000, venta: 320, compra: 312, ciclos: 12 };
+
+  function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
+
+  function readModel() {
+    var C = state.capital, tv = state.venta, tc = state.compra, N = state.ciclos;
+    var grossPct = (tv - tc) / tc;
+    var netPct = ((tv * FEE_SELL) - (tc * FEE_BUY)) / (tc * FEE_BUY);
+    return {
+      C: C, tv: tv, tc: tc, N: N,
+      grossPct: grossPct, netPct: netPct,
+      gross: C * grossPct, net: C * netPct,
+      grossTotal: C * grossPct * N, netTotal: C * netPct * N
+    };
+  }
+
+  /* ---------- chart ---------- */
+  function niceTicks(lo, hi, count) {
+    if (hi === lo) { hi = lo + 1; }
+    var raw = (hi - lo) / count;
+    var mag = Math.pow(10, Math.floor(Math.log(raw) / Math.LN10));
+    var norm = raw / mag, step;
+    if (norm <= 1) step = 1; else if (norm <= 2) step = 2; else if (norm <= 2.5) step = 2.5;
+    else if (norm <= 5) step = 5; else step = 10;
+    step *= mag;
+    var ticks = [], t = Math.ceil(lo / step) * step;
+    for (; t <= hi + step * 1e-6; t += step) ticks.push(Math.abs(t) < step * 1e-6 ? 0 : t);
+    return ticks;
+  }
+
+  function svgEl(name, attrs) {
+    var n = document.createElementNS("http://www.w3.org/2000/svg", name);
+    for (var k in attrs) if (attrs[k] !== null && attrs[k] !== undefined) n.setAttribute(k, attrs[k]);
+    return n;
+  }
+
+  var geom = null;
+
+  function drawChart(m) {
+    var svg = el.svg;
+    while (svg.lastChild) svg.removeChild(svg.lastChild);
+
+    var desc = svgEl("desc", { id: "chartDesc" });
+    desc.textContent = "Ganancia acumulada tras " + m.N + " ciclos: bruta " + money(m.grossTotal) +
+      " USDT, neta " + money(m.netTotal) + " USDT.";
+    svg.appendChild(desc);
+
+    var W = Math.max(280, el.host.clientWidth - 8);
+    var H = W < 520 ? 268 : 330;
+    var ml = W < 420 ? 52 : 62, mr = W < 420 ? 20 : 74, mt = 22, mb = 40;
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    svg.setAttribute("width", W); svg.setAttribute("height", H);
+
+    var x0 = ml, x1 = W - mr, y0 = H - mb, y1 = mt;
+    var lo = Math.min(0, m.netTotal, m.grossTotal);
+    var hi = Math.max(0, m.netTotal, m.grossTotal);
+    var pad = (hi - lo) * 0.1 || 1;
+    lo -= (lo < 0 ? pad : 0); hi += pad;
+
+    var X = function (c) { return x0 + (c / m.N) * (x1 - x0); };
+    var Y = function (v) { return y0 - ((v - lo) / (hi - lo)) * (y0 - y1); };
+
+    var g = svgEl("g", {});
+    svg.appendChild(g);
+
+    // gridlines + y labels
+    var yticks = niceTicks(lo, hi, 5);
+    yticks.forEach(function (t) {
+      var yy = Y(t), zero = t === 0;
+      g.appendChild(svgEl("line", {
+        x1: x0, x2: x1, y1: yy, y2: yy, "stroke-width": zero ? 1.5 : 1,
+        style: "fill:none;stroke:" + (zero ? "var(--axis)" : "var(--grid)")
+      }));
+      var lbl = svgEl("text", {
+        x: x0 - 9, y: yy + 4, "text-anchor": "end",
+        style: "fill:var(--ink-muted);font-family:var(--mono);font-size:11px;font-variant-numeric:tabular-nums"
+      });
+      lbl.textContent = Math.abs(t) >= 10000 ? nf(t / 1000, 0) + "k" : nf(t, 0);
+      g.appendChild(lbl);
+    });
+
+    // x ticks
+    var step = Math.max(1, Math.ceil(m.N / (W < 460 ? 5 : 9)));
+    for (var c = 0; c <= m.N; c += step) {
+      var xx = X(c);
+      var xl = svgEl("text", {
+        x: xx, y: y0 + 19, "text-anchor": "middle",
+        style: "fill:var(--ink-muted);font-family:var(--mono);font-size:11px"
+      });
+      xl.textContent = c;
+      g.appendChild(xl);
+    }
+    var axisTitle = svgEl("text", {
+      x: (x0 + x1) / 2, y: H - 6, "text-anchor": "middle",
+      style: "fill:var(--ink-muted);font-family:var(--sans);font-size:11.5px"
+    });
+    axisTitle.textContent = "Ciclos completados";
+    g.appendChild(axisTitle);
+
+    var yTitle = svgEl("text", {
+      x: 0, y: 0, transform: "translate(13," + ((y0 + y1) / 2) + ") rotate(-90)",
+      "text-anchor": "middle",
+      style: "fill:var(--ink-muted);font-family:var(--sans);font-size:11.5px"
+    });
+    yTitle.textContent = "USDT acumulados";
+    g.appendChild(yTitle);
+
+    // area under gross (to the zero baseline)
+    var yZero = Y(0);
+    g.appendChild(svgEl("path", {
+      d: "M" + X(0) + "," + yZero + " L" + X(0) + "," + Y(0) + " L" + X(m.N) + "," + Y(m.grossTotal) + " L" + X(m.N) + "," + yZero + " Z",
+      style: "fill:var(--bruta-soft);stroke:none"
+    }));
+
+    // gross line
+    g.appendChild(svgEl("line", {
+      x1: X(0), y1: Y(0), x2: X(m.N), y2: Y(m.grossTotal), "stroke-width": 2, "stroke-linecap": "round",
+      style: "fill:none;stroke:var(--bruta)"
+    }));
+    // net line
+    g.appendChild(svgEl("line", {
+      x1: X(0), y1: Y(0), x2: X(m.N), y2: Y(m.netTotal), "stroke-width": 2, "stroke-linecap": "round",
+      style: "fill:none;stroke:var(--neta)"
+    }));
+
+    // endpoint markers
+    [[m.grossTotal, "var(--bruta)"], [m.netTotal, "var(--neta)"]].forEach(function (p) {
+      g.appendChild(svgEl("circle", {
+        cx: X(m.N), cy: Y(p[0]), r: 4.5, "stroke-width": 2,
+        style: "fill:" + p[1] + ";stroke:var(--surface)"
+      }));
+    });
+
+    // direct endpoint labels (only when there is room on the right)
+    if (mr > 40) {
+      var gy = clamp(Y(m.grossTotal) - 9, y1 + 10, y0 - 4);
+      var ny = clamp(Y(m.netTotal) + 15, y1 + 10, y0 - 2);
+      if (Math.abs(gy - ny) < 13) { ny = gy + 15; }
+      var gt = svgEl("text", {
+        x: X(m.N) + 8, y: gy, "text-anchor": "start",
+        style: "fill:var(--bruta);font-family:var(--mono);font-size:11.5px;font-weight:600"
+      });
+      gt.textContent = nf(m.grossTotal, 0);
+      g.appendChild(gt);
+      var nt2 = svgEl("text", {
+        x: X(m.N) + 8, y: ny, "text-anchor": "start",
+        style: "fill:var(--neta);font-family:var(--mono);font-size:11.5px;font-weight:600"
+      });
+      nt2.textContent = nf(m.netTotal, 0);
+      g.appendChild(nt2);
+    }
+
+    // hover layer
+    var hover = svgEl("g", { opacity: 0 });
+    var hLine = svgEl("line", { y1: y1, y2: y0, "stroke-width": 1, "stroke-dasharray": "3 3",
+      style: "stroke:var(--rule-strong)" });
+    var hG = svgEl("circle", { r: 5, "stroke-width": 2, style: "fill:var(--bruta);stroke:var(--surface)" });
+    var hN = svgEl("circle", { r: 5, "stroke-width": 2, style: "fill:var(--neta);stroke:var(--surface)" });
+    hover.appendChild(hLine); hover.appendChild(hG); hover.appendChild(hN);
+    g.appendChild(hover);
+
+    var capture = svgEl("rect", { x: x0, y: y1, width: Math.max(1, x1 - x0), height: Math.max(1, y0 - y1), fill: "transparent" });
+    g.appendChild(capture);
+
+    geom = { m: m, X: X, Y: Y, x0: x0, x1: x1, hover: hover, hLine: hLine, hG: hG, hN: hN, capture: capture, H: H };
+    bindHover();
+  }
+
+  function bindHover() {
+    var gm = geom;
+    function show(evt) {
+      var rect = el.svg.getBoundingClientRect();
+      var px = ((evt.clientX - rect.left) / rect.width) * parseFloat(el.svg.getAttribute("viewBox").split(" ")[2]);
+      var frac = (px - gm.x0) / (gm.x1 - gm.x0);
+      var c = clamp(Math.round(frac * gm.m.N), 0, gm.m.N);
+      var gv = gm.m.gross * c, nv = gm.m.net * c;
+      gm.hover.setAttribute("opacity", 1);
+      gm.hLine.setAttribute("x1", gm.X(c)); gm.hLine.setAttribute("x2", gm.X(c));
+      gm.hG.setAttribute("cx", gm.X(c)); gm.hG.setAttribute("cy", gm.Y(gv));
+      gm.hN.setAttribute("cx", gm.X(c)); gm.hN.setAttribute("cy", gm.Y(nv));
+      el.tip.innerHTML =
+        '<div class="t-head">Ciclo ' + c + ' de ' + gm.m.N + '</div>' +
+        '<div class="t-row"><span class="t-name"><span class="t-dot" style="background:var(--bruta)"></span>Bruta</span><span class="t-num">' + money(gv) + '</span></div>' +
+        '<div class="t-row"><span class="t-name"><span class="t-dot" style="background:var(--neta)"></span>Neta</span><span class="t-num">' + money(nv) + '</span></div>' +
+        '<div class="t-row"><span class="t-name">Comisiones</span><span class="t-num">−' + money(gv - nv) + '</span></div>';
+      el.tip.setAttribute("data-on", "1");
+      var hostW = el.host.clientWidth;
+      var tw = el.tip.offsetWidth || 160;
+      var left = clamp((gm.X(c) / parseFloat(el.svg.getAttribute("viewBox").split(" ")[2])) * hostW + 14, 4, Math.max(4, hostW - tw - 4));
+      el.tip.style.left = left + "px";
+      el.tip.style.top = Math.max(4, gm.H * 0.12) + "px";
+    }
+    function hide() {
+      gm.hover.setAttribute("opacity", 0);
+      el.tip.setAttribute("data-on", "0");
+    }
+    gm.capture.addEventListener("pointermove", show);
+    gm.capture.addEventListener("pointerdown", show);
+    gm.capture.addEventListener("pointerleave", hide);
+  }
+
+  /* ---------- table ---------- */
+  function drawTable(m) {
+    var rows = "";
+    for (var c = 1; c <= m.N; c++) {
+      rows += "<tr><td>" + c + "</td><td>" + money(m.gross * c) + "</td><td>" + money(m.net * c) +
+        "</td><td>−" + money((m.gross - m.net) * c) + "</td></tr>";
+    }
+    el.tbody.innerHTML = rows;
+  }
+
+  /* ---------- render ---------- */
+  function render() {
+    var m = readModel();
+
+    el.kCapital.innerHTML = nf(m.C, 0) + '<span class="k-unit">USDT</span>';
+    el.kCapitalSub.textContent = "por ciclo · " + nf(m.C * m.N, 0) + " USDT movidos en total";
+
+    el.kBruta.innerHTML = signed(m.gross) + '<span class="k-unit">USDT</span>';
+    el.kBruta.classList.toggle("neg", m.gross < 0);
+    el.kBrutaSub.textContent = "margen bruto " + signed(m.grossPct * 100, 3) + " %";
+
+    el.kNeta.innerHTML = signed(m.net) + '<span class="k-unit">USDT</span>';
+    el.kNeta.classList.toggle("neg", m.net < 0);
+    el.kNetaSub.textContent = "margen neto " + signed(m.netPct * 100, 3) + " %";
+
+    el.kTotal.innerHTML = signed(m.netTotal) + '<span class="k-unit">USDT</span>';
+    el.kTotal.classList.toggle("neg", m.netTotal < 0);
+    el.kTotalSub.textContent = m.N + (m.N === 1 ? " ciclo" : " ciclos") + " · bruto " + signed(m.grossTotal) +
+      " · comisiones −" + money((m.gross - m.net) * m.N);
+
+    var dif = m.tv - m.tc;
+    el.srSpread.textContent = signed(dif, 2) + "  (" + signed(m.grossPct * 100, 3) + " %)";
+    el.srSpread.classList.toggle("neg", dif <= 0);
+
+    if (m.net > 0) {
+      el.verdict.setAttribute("data-state", "good");
+      el.verdictText.textContent = "Rentable · " + signed(m.netPct * 100, 2) + " % neto por ciclo";
+    } else if (m.gross > 0) {
+      el.verdict.setAttribute("data-state", "bad");
+      el.verdictText.textContent = "Las comisiones se comen el diferencial";
+    } else {
+      el.verdict.setAttribute("data-state", "bad");
+      el.verdictText.textContent = "Pérdida · recompras más caro de lo que vendes";
+    }
+
+    el.note.textContent = m.net > 0
+      ? "La franja azul sobre la línea naranja es lo que se llevan las comisiones: " +
+        money((m.gross - m.net) * m.N) + " USDT en " + m.N + (m.N === 1 ? " ciclo." : " ciclos.")
+      : "Con estos precios cada ciclo destruye capital: la línea naranja cae por debajo de cero.";
+
+    drawChart(m);
+    drawTable(m);
+  }
+
+  /* ---------- inputs ---------- */
+  function paint(k) {
+    var r = R[k];
+    var pct = ((r.value - r.min) / (r.max - r.min)) * 100;
+    r.style.setProperty("--pct", pct + "%");
+  }
+
+  ids.forEach(function (k) {
+    var r = R[k], n = Nm[k];
+    r.addEventListener("input", function () {
+      state[k] = parseFloat(r.value);
+      n.value = r.value;
+      paint(k);
+      render();
+    });
+    n.addEventListener("input", function () {
+      var v = parseFloat(n.value);
+      if (isNaN(v)) return;
+      state[k] = clamp(v, parseFloat(r.min), parseFloat(r.max));
+      r.value = state[k];
+      paint(k);
+      render();
+    });
+    n.addEventListener("blur", function () {
+      n.value = state[k];
+    });
+    paint(k);
+  });
+
+  var raf = null;
+  if (window.ResizeObserver) {
+    new ResizeObserver(function () {
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(function () { drawChart(readModel()); });
+    }).observe(el.host);
+  } else {
+    window.addEventListener("resize", function () { drawChart(readModel()); });
+  }
+
+  render();
+})();
+</script>
+
+<script>
+(function () {
+  "use strict";
+  var bar = document.getElementById("installBar");
+  var btn = document.getElementById("installBtn");
+  var txt = document.getElementById("installText");
+  var dismiss = document.getElementById("installDismiss");
+  var KEY = "calc-install-dismissed";
+
+  function dismissed() {
+    try { return localStorage.getItem(KEY) === "1"; } catch (e) { return false; }
+  }
+  function remember() {
+    try { localStorage.setItem(KEY, "1"); } catch (e) { /* modo privado: no pasa nada */ }
+  }
+
+  var standalone = window.matchMedia("(display-mode: standalone)").matches ||
+                   window.navigator.standalone === true;
+
+  var deferred = null;
+  window.addEventListener("beforeinstallprompt", function (e) {
+    e.preventDefault();
+    deferred = e;
+    if (!standalone && !dismissed()) bar.hidden = false;
+  });
+
+  btn.addEventListener("click", function () {
+    if (!deferred) return;
+    deferred.prompt();
+    deferred.userChoice.then(function () { deferred = null; bar.hidden = true; });
+  });
+
+  dismiss.addEventListener("click", function () { bar.hidden = true; remember(); });
+
+  window.addEventListener("appinstalled", function () { bar.hidden = true; });
+
+  // iOS no expone beforeinstallprompt: hay que decirle a la persona qué tocar.
+  var iOS = /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+            (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  if (iOS && !standalone && !dismissed()) {
+    txt.textContent = "En iPhone: toca Compartir y luego \u00ABA\u00f1adir a pantalla de inicio\u00BB.";
+    btn.hidden = true;
+    bar.hidden = false;
+  }
+
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("sw.js").catch(function () {
+        // Sin service worker la calculadora sigue funcionando; solo pierde el modo offline.
+      });
+    });
+  }
+})();
+</script>
+
+</body>
+</html>

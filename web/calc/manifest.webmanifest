@@ -1,0 +1,21 @@
+{
+  "id": "/calc/",
+  "name": "Ciclos de Arbitraje USDT",
+  "short_name": "Arbitraje",
+  "description": "Calculadora de arbitraje USDT: capital, precios de venta y recompra, ciclos, y ganancia bruta y neta acumulada.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#e9edf2",
+  "theme_color": "#e9edf2",
+  "lang": "es",
+  "dir": "ltr",
+  "categories": ["finance", "productivity", "utilities"],
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

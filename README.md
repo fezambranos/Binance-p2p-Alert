@@ -15,6 +15,7 @@ fases y decisiones abiertas). Empieza por [`docs/README.md`](docs/README.md).
 ## Estructura
 
 - `docs/` — marco SDD: especificaciones, ADR y método analítico.
+- `web/calc/` — calculadora de arbitraje USDT, PWA instalable e independiente.
 - `web/` — página estática (HTML/CSS/JS sin dependencias, PWA instalable).
 - `functions/` — Cloud Function que hace de proxy hacia la API de Binance P2P,
   porque Binance no permite llamarla directo desde el navegador (CORS).
@@ -45,12 +46,45 @@ Abre la URL de Hosting en tu teléfono, entra a **Opciones avanzadas** y pega ah
 la URL de la Function como "Endpoint del proxy" (queda guardada en el teléfono,
 solo se hace una vez). Luego fija tu nivel de precio y pulsa **Iniciar monitoreo**.
 
+## Calculadora de arbitraje (`/calc/`)
+
+App aparte, instalable en la pantalla de inicio. Calcula la ganancia bruta y
+neta por ciclo y acumulada a partir de cuatro variables: capital por ciclo,
+precio de venta, precio de recompra y número de ciclos.
+
+Es **matemática pura en el navegador**: no llama a Binance, no usa la Cloud
+Function y no necesita plan Blaze. Con su service worker (alcance `/calc/`, no
+toca la app de alertas) funciona completa sin conexión.
+
+Queda desplegada junto al resto del hosting:
+
+```bash
+firebase deploy --only hosting
+```
+
+Luego, en `https://tu-proyecto.web.app/calc/`:
+
+- **Android / Chrome** — aparece una barra ofreciendo instalar; o menú ⋮ →
+  *Instalar aplicación*.
+- **iPhone / Safari** — botón Compartir → *Añadir a pantalla de inicio*.
+  (Safari no ofrece instalación automática; la app lo indica en pantalla.)
+
+Instalada se abre a pantalla completa, con su propio icono, sin barra de
+navegador y sin depender de la conexión.
+
 ## Desarrollo local
 
 ```bash
 cd functions
 npm install
 npm test              # tests unitarios del proxy
+```
+
+La calculadora necesita servirse por HTTP para que el service worker se
+registre (abrirla como `file://` la muestra, pero sin modo offline):
+
+```bash
+npx http-server web -p 8080    # luego abre http://localhost:8080/calc/
 ```
 
 Para probar `web/index.html` en local, ábrelo directo en el navegador y en
