@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ciclos de Arbitraje USDT</title>
-<meta name="description" content="Calculadora de arbitraje USDT: capital, precio de venta, precio de recompra y número de ciclos, con ganancia bruta y neta acumulada.">
+<meta name="description" content="Calculadora de arbitraje USDT: capital, precio de venta, precio de recompra y número de ciclos, en modo simple o compuesto, con ganancia bruta y neta acumulada.">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
@@ -215,6 +215,21 @@
   .ctl[data-accent="compra"]  { --accent: var(--neta); }
   .ctl[data-accent="ciclos"]  { --accent: var(--ink-2); }
 
+  .segmented {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 3px;
+    background: var(--surface-2); border: 1px solid var(--rule); border-radius: 9px;
+  }
+  .segmented button {
+    font: inherit; font-size: 13.5px; font-weight: 600; padding: 9px 6px;
+    border-radius: 6px; border: 1px solid transparent; background: transparent;
+    color: var(--ink-2); cursor: pointer;
+  }
+  .segmented button[aria-checked="true"] {
+    background: var(--surface); color: var(--ink); border-color: var(--rule-strong);
+    box-shadow: 0 1px 2px rgba(16,20,25,0.07);
+  }
+  .seg-hint { margin: 9px 0 0; font-size: 12px; color: var(--ink-muted); }
+
   .spread-readout {
     margin-top: 14px; padding: 11px 13px; border-radius: 8px; background: var(--surface-2);
     border: 1px solid var(--rule); display: flex; flex-direction: column; gap: 2px;
@@ -336,12 +351,12 @@
       <span class="k-sub" id="kCapitalSub">por ciclo</span>
     </div>
     <div class="kpi is-bruta">
-      <span class="k-label">Utilidad bruta / ciclo</span>
+      <span class="k-label" id="lblBruta">Utilidad bruta / ciclo</span>
       <span class="k-value" id="kBruta">—<span class="k-unit">USDT</span></span>
       <span class="k-sub" id="kBrutaSub">—</span>
     </div>
     <div class="kpi is-neta">
-      <span class="k-label">Utilidad neta / ciclo</span>
+      <span class="k-label" id="lblNeta">Utilidad neta / ciclo</span>
       <span class="k-value" id="kNeta">—<span class="k-unit">USDT</span></span>
       <span class="k-sub" id="kNetaSub">—</span>
     </div>
@@ -357,6 +372,17 @@
     <section class="card">
       <h2>Variables</h2>
       <div class="controls">
+
+        <div class="ctl">
+          <div class="ctl-head">
+            <label id="modoLabel">Modo de acumulaci&oacute;n<span class="hint">Qu&eacute; haces con la ganancia de cada ciclo</span></label>
+          </div>
+          <div class="segmented" id="modoGroup" role="radiogroup" aria-labelledby="modoLabel">
+            <button type="button" role="radio" aria-checked="true" data-modo="simple" id="modoSimple">Simple</button>
+            <button type="button" role="radio" aria-checked="false" data-modo="compuesto" id="modoCompuesto" tabindex="-1">Compuesto</button>
+          </div>
+          <p class="seg-hint" id="modoHint">Retiras la ganancia: cada ciclo entra siempre el mismo capital.</p>
+        </div>
 
         <div class="ctl" data-accent="capital">
           <div class="ctl-head">
@@ -402,7 +428,7 @@
     </section>
 
     <section class="card chart-card">
-      <h2>Ganancia acumulada por ciclo</h2>
+      <h2 id="chartTitle">Ganancia acumulada · modo simple</h2>
       <div class="legend">
         <span class="lg"><span class="swatch area" style="background: var(--bruta-soft); border-color: var(--bruta);"></span> Ganancia bruta acumulada</span>
         <span class="lg"><span class="swatch" style="background: var(--neta);"></span> Ganancia neta acumulada</span>
@@ -416,7 +442,7 @@
         <summary>Ver la tabla ciclo por ciclo</summary>
         <div class="table-scroll">
           <table>
-            <thead><tr><th scope="col">Ciclo</th><th scope="col">Bruta acum.</th><th scope="col">Neta acum.</th><th scope="col">Comisiones acum.</th></tr></thead>
+            <thead><tr><th scope="col">Ciclo</th><th scope="col">Neta del ciclo</th><th scope="col">Bruta acum.</th><th scope="col">Neta acum.</th><th scope="col">Comisiones acum.</th></tr></thead>
             <tbody id="tbody"></tbody>
           </table>
         </div>
@@ -436,13 +462,16 @@
         <code>Capital × ((T_v × 0,998) − (T_c × 1,002)) / (T_c × 1,002)</code>
       </div>
       <div class="fx-row">
-        <span class="fx-name">Acumulado a N ciclos</span>
+        <span class="fx-name">Acumulado a N ciclos · modo simple</span>
         <code>Ganancia por ciclo × N</code>
+      </div>
+      <div class="fx-row">
+        <span class="fx-name">Acumulado a N ciclos · modo compuesto</span>
+        <code>Capital × ((1 + margen)^N − 1)</code>
       </div>
     </div>
   </section>
 </div>
-
 <div class="install-bar" id="installBar" hidden>
   <p id="installText">Instálala en tu pantalla de inicio para abrirla de un toque, incluso sin conexión.</p>
   <button type="button" id="installBtn">Instalar</button>
@@ -473,22 +502,50 @@
     verdict: document.getElementById("verdict"), verdictText: document.getElementById("verdictText"),
     tbody: document.getElementById("tbody"), svg: document.getElementById("chart"),
     host: document.getElementById("chartHost"), tip: document.getElementById("tip"),
-    note: document.getElementById("chartNote")
+    note: document.getElementById("chartNote"),
+    modoGroup: document.getElementById("modoGroup"), modoHint: document.getElementById("modoHint"),
+    lblBruta: document.getElementById("lblBruta"), lblNeta: document.getElementById("lblNeta"),
+    chartTitle: document.getElementById("chartTitle")
   };
 
-  var state = { capital: 1000, venta: 320, compra: 312, ciclos: 12 };
+  var state = { capital: 1000, venta: 320, compra: 312, ciclos: 12, modo: "simple" };
 
   function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
+  // Acumulado tras t ciclos.
+  //   simple    -> se retira la ganancia: siempre entra el mismo capital.  C * m * t
+  //   compuesto -> se reinvierte: cada ciclo parte de un capital mayor.    C * ((1+m)^t - 1)
+  function accum(C, m, t, comp) {
+    return comp ? C * (Math.pow(1 + m, t) - 1) : C * m * t;
+  }
+
   function readModel() {
     var C = state.capital, tv = state.venta, tc = state.compra, N = state.ciclos;
+    var comp = state.modo === "compuesto";
     var grossPct = (tv - tc) / tc;
     var netPct = ((tv * FEE_SELL) - (tc * FEE_BUY)) / (tc * FEE_BUY);
+
+    var gSeries = [0], nSeries = [0];
+    for (var t = 1; t <= N; t++) {
+      gSeries.push(accum(C, grossPct, t, comp));
+      nSeries.push(accum(C, netPct, t, comp));
+    }
+
+    var grossTotal = gSeries[N], netTotal = nSeries[N];
+
     return {
-      C: C, tv: tv, tc: tc, N: N,
+      C: C, tv: tv, tc: tc, N: N, comp: comp,
       grossPct: grossPct, netPct: netPct,
-      gross: C * grossPct, net: C * netPct,
-      grossTotal: C * grossPct * N, netTotal: C * netPct * N
+      gSeries: gSeries, nSeries: nSeries,
+      // utilidad del primer ciclo (en modo simple es la de todos)
+      gross: gSeries[1], net: nSeries[1],
+      // utilidad del último ciclo: en compuesto crece, en simple es la misma
+      grossLast: gSeries[N] - gSeries[N - 1],
+      netLast: nSeries[N] - nSeries[N - 1],
+      grossTotal: grossTotal, netTotal: netTotal,
+      capitalFinal: C + netTotal,
+      // el mismo escenario calculado en el otro modo, para poder compararlos
+      otherNetTotal: accum(C, netPct, N, !comp)
     };
   }
 
@@ -530,8 +587,11 @@
     svg.setAttribute("width", W); svg.setAttribute("height", H);
 
     var x0 = ml, x1 = W - mr, y0 = H - mb, y1 = mt;
-    var lo = Math.min(0, m.netTotal, m.grossTotal);
-    var hi = Math.max(0, m.netTotal, m.grossTotal);
+    var lo = 0, hi = 0;
+    for (var si = 0; si <= m.N; si++) {
+      lo = Math.min(lo, m.gSeries[si], m.nSeries[si]);
+      hi = Math.max(hi, m.gSeries[si], m.nSeries[si]);
+    }
     var pad = (hi - lo) * 0.1 || 1;
     lo -= (lo < 0 ? pad : 0); hi += pad;
 
@@ -583,21 +643,26 @@
     yTitle.textContent = "USDT acumulados";
     g.appendChild(yTitle);
 
-    // area under gross (to the zero baseline)
+    // Trayectoria de una serie. En modo simple sale una recta; en compuesto, una curva.
+    function pathOf(series) {
+      var d = "";
+      for (var i = 0; i <= m.N; i++) d += (i ? " L" : "M") + X(i) + "," + Y(series[i]);
+      return d;
+    }
+
+    // área bajo la bruta, cerrada contra la línea de cero
     var yZero = Y(0);
     g.appendChild(svgEl("path", {
-      d: "M" + X(0) + "," + yZero + " L" + X(0) + "," + Y(0) + " L" + X(m.N) + "," + Y(m.grossTotal) + " L" + X(m.N) + "," + yZero + " Z",
+      d: pathOf(m.gSeries) + " L" + X(m.N) + "," + yZero + " L" + X(0) + "," + yZero + " Z",
       style: "fill:var(--bruta-soft);stroke:none"
     }));
 
-    // gross line
-    g.appendChild(svgEl("line", {
-      x1: X(0), y1: Y(0), x2: X(m.N), y2: Y(m.grossTotal), "stroke-width": 2, "stroke-linecap": "round",
+    g.appendChild(svgEl("path", {
+      d: pathOf(m.gSeries), "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round",
       style: "fill:none;stroke:var(--bruta)"
     }));
-    // net line
-    g.appendChild(svgEl("line", {
-      x1: X(0), y1: Y(0), x2: X(m.N), y2: Y(m.netTotal), "stroke-width": 2, "stroke-linecap": "round",
+    g.appendChild(svgEl("path", {
+      d: pathOf(m.nSeries), "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round",
       style: "fill:none;stroke:var(--neta)"
     }));
 
@@ -651,7 +716,7 @@
       var px = ((evt.clientX - rect.left) / rect.width) * parseFloat(el.svg.getAttribute("viewBox").split(" ")[2]);
       var frac = (px - gm.x0) / (gm.x1 - gm.x0);
       var c = clamp(Math.round(frac * gm.m.N), 0, gm.m.N);
-      var gv = gm.m.gross * c, nv = gm.m.net * c;
+      var gv = gm.m.gSeries[c], nv = gm.m.nSeries[c];
       gm.hover.setAttribute("opacity", 1);
       gm.hLine.setAttribute("x1", gm.X(c)); gm.hLine.setAttribute("x2", gm.X(c));
       gm.hG.setAttribute("cx", gm.X(c)); gm.hG.setAttribute("cy", gm.Y(gv));
@@ -681,8 +746,10 @@
   function drawTable(m) {
     var rows = "";
     for (var c = 1; c <= m.N; c++) {
-      rows += "<tr><td>" + c + "</td><td>" + money(m.gross * c) + "</td><td>" + money(m.net * c) +
-        "</td><td>−" + money((m.gross - m.net) * c) + "</td></tr>";
+      var delCiclo = m.nSeries[c] - m.nSeries[c - 1];
+      rows += "<tr><td>" + c + "</td><td>" + signed(delCiclo) + "</td><td>" + money(m.gSeries[c]) +
+        "</td><td>" + money(m.nSeries[c]) +
+        "</td><td>−" + money(m.gSeries[c] - m.nSeries[c]) + "</td></tr>";
     }
     el.tbody.innerHTML = rows;
   }
@@ -691,41 +758,65 @@
   function render() {
     var m = readModel();
 
+    var ciclos = m.N + (m.N === 1 ? " ciclo" : " ciclos");
+    var comisiones = m.grossTotal - m.netTotal;
+
     el.kCapital.innerHTML = nf(m.C, 0) + '<span class="k-unit">USDT</span>';
-    el.kCapitalSub.textContent = "por ciclo · " + nf(m.C * m.N, 0) + " USDT movidos en total";
+    el.kCapitalSub.textContent = m.comp
+      ? "inicial \u00b7 capital al cierre " + nf(m.capitalFinal, 2) + " USDT"
+      : "por ciclo \u00b7 " + nf(m.C * m.N, 0) + " USDT movidos en total";
+
+    el.lblBruta.textContent = m.comp ? "Utilidad bruta \u00b7 ciclo 1" : "Utilidad bruta / ciclo";
+    el.lblNeta.textContent  = m.comp ? "Utilidad neta \u00b7 ciclo 1"  : "Utilidad neta / ciclo";
 
     el.kBruta.innerHTML = signed(m.gross) + '<span class="k-unit">USDT</span>';
     el.kBruta.classList.toggle("neg", m.gross < 0);
-    el.kBrutaSub.textContent = "margen bruto " + signed(m.grossPct * 100, 3) + " %";
+    el.kBrutaSub.textContent = "margen bruto " + signed(m.grossPct * 100, 3) + " %" +
+      (m.comp && m.N > 1 ? " \u00b7 ciclo " + m.N + ": " + signed(m.grossLast) : "");
 
     el.kNeta.innerHTML = signed(m.net) + '<span class="k-unit">USDT</span>';
     el.kNeta.classList.toggle("neg", m.net < 0);
-    el.kNetaSub.textContent = "margen neto " + signed(m.netPct * 100, 3) + " %";
+    el.kNetaSub.textContent = "margen neto " + signed(m.netPct * 100, 3) + " %" +
+      (m.comp && m.N > 1 ? " \u00b7 ciclo " + m.N + ": " + signed(m.netLast) : "");
 
     el.kTotal.innerHTML = signed(m.netTotal) + '<span class="k-unit">USDT</span>';
     el.kTotal.classList.toggle("neg", m.netTotal < 0);
-    el.kTotalSub.textContent = m.N + (m.N === 1 ? " ciclo" : " ciclos") + " · bruto " + signed(m.grossTotal) +
-      " · comisiones −" + money((m.gross - m.net) * m.N);
+    el.kTotalSub.textContent = ciclos + " \u00b7 bruto " + signed(m.grossTotal) +
+      " \u00b7 comisiones \u2212" + money(comisiones) +
+      " \u00b7 vs " + (m.comp ? "simple " : "compuesto ") + signed(m.netTotal - m.otherNetTotal);
 
     var dif = m.tv - m.tc;
     el.srSpread.textContent = signed(dif, 2) + "  (" + signed(m.grossPct * 100, 3) + " %)";
     el.srSpread.classList.toggle("neg", dif <= 0);
 
+    el.chartTitle.textContent = m.comp
+      ? "Ganancia acumulada \u00b7 modo compuesto"
+      : "Ganancia acumulada \u00b7 modo simple";
+
     if (m.net > 0) {
       el.verdict.setAttribute("data-state", "good");
-      el.verdictText.textContent = "Rentable · " + signed(m.netPct * 100, 2) + " % neto por ciclo";
+      el.verdictText.textContent = "Rentable \u00b7 " + signed(m.netPct * 100, 2) + " % neto por ciclo";
     } else if (m.gross > 0) {
       el.verdict.setAttribute("data-state", "bad");
       el.verdictText.textContent = "Las comisiones se comen el diferencial";
     } else {
       el.verdict.setAttribute("data-state", "bad");
-      el.verdictText.textContent = "Pérdida · recompras más caro de lo que vendes";
+      el.verdictText.textContent = "P\u00e9rdida \u00b7 recompras m\u00e1s caro de lo que vendes";
     }
 
-    el.note.textContent = m.net > 0
-      ? "La franja azul sobre la línea naranja es lo que se llevan las comisiones: " +
-        money((m.gross - m.net) * m.N) + " USDT en " + m.N + (m.N === 1 ? " ciclo." : " ciclos.")
-      : "Con estos precios cada ciclo destruye capital: la línea naranja cae por debajo de cero.";
+    if (m.net <= 0) {
+      el.note.textContent = m.comp
+        ? "Con estos precios el inter\u00e9s compuesto trabaja en contra: cada ciclo reinvierte un capital m\u00e1s peque\u00f1o."
+        : "Con estos precios cada ciclo destruye capital: la l\u00ednea naranja cae por debajo de cero.";
+    } else if (m.comp) {
+      el.note.textContent = "Al reinvertir, cada ciclo parte de un capital mayor: por eso las curvas se abren. " +
+        "Son " + signed(m.netTotal - m.otherNetTotal) + " USDT frente al modo simple, y el capital pasa de " +
+        nf(m.C, 0) + " a " + nf(m.capitalFinal, 2) + " USDT.";
+    } else {
+      el.note.textContent = "La franja azul sobre la l\u00ednea naranja es lo que se llevan las comisiones: " +
+        money(comisiones) + " USDT en " + ciclos + ". Reinvirtiendo dar\u00eda " +
+        signed(m.otherNetTotal) + " USDT.";
+    }
 
     drawChart(m);
     drawTable(m);
@@ -760,6 +851,34 @@
     paint(k);
   });
 
+  var modoBtns = Array.prototype.slice.call(el.modoGroup.querySelectorAll("button"));
+
+  function setModo(modo) {
+    state.modo = modo;
+    modoBtns.forEach(function (b) {
+      var on = b.getAttribute("data-modo") === modo;
+      b.setAttribute("aria-checked", on ? "true" : "false");
+      b.tabIndex = on ? 0 : -1;
+    });
+    el.modoHint.textContent = modo === "compuesto"
+      ? "Reinviertes la ganancia: el capital del siguiente ciclo es el anterior m\u00e1s lo ganado."
+      : "Retiras la ganancia: cada ciclo entra siempre el mismo capital.";
+    render();
+  }
+
+  modoBtns.forEach(function (b) {
+    b.addEventListener("click", function () { setModo(b.getAttribute("data-modo")); });
+  });
+
+  // Flechas para moverse dentro del grupo, como espera un radiogroup.
+  el.modoGroup.addEventListener("keydown", function (e) {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight" && e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+    e.preventDefault();
+    var next = state.modo === "simple" ? "compuesto" : "simple";
+    setModo(next);
+    el.modoGroup.querySelector('[data-modo="' + next + '"]').focus();
+  });
+
   var raf = null;
   if (window.ResizeObserver) {
     new ResizeObserver(function () {
@@ -773,7 +892,6 @@
   render();
 })();
 </script>
-
 <script>
 (function () {
   "use strict";
