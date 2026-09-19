@@ -4,15 +4,27 @@ App independiente (nada que ver con el CRM) que alerta con sonido, banner visual
 vibración cuando el precio P2P de Binance (por defecto USDT/VES) cruza el nivel
 que definas. Diseñada para dejarla abierta en el navegador del teléfono.
 
+## Diseño del sistema
+
+El proyecto está evolucionando hacia un sistema de monitoreo, recomendación y
+contabilidad para operar USDT/VES en el P2P de Binance. El diseño se lleva con
+desarrollo dirigido por especificación: **[`docs/`](docs/) es la fuente de verdad**
+(visión, glosario, requisitos, modelo de dominio, método analítico, riesgos,
+fases y decisiones abiertas). Empieza por [`docs/README.md`](docs/README.md).
+
 ## Estructura
 
+- `docs/` — marco SDD: especificaciones, ADR y método analítico.
 - `web/` — página estática (HTML/CSS/JS sin dependencias, PWA instalable).
 - `functions/` — Cloud Function que hace de proxy hacia la API de Binance P2P,
   porque Binance no permite llamarla directo desde el navegador (CORS).
 
 ## Desplegar
 
-Requiere una cuenta de Firebase (el plan gratuito Spark alcanza para esto).
+Requiere una cuenta de Firebase. **Ojo:** el plan gratuito Spark no permite
+salida de red hacia servicios externos desde Cloud Functions, así que el proxy
+necesita plan Blaze. Dónde alojar el recolector continuo sigue abierto: ver `D-03`
+en [`docs/07-decisiones-abiertas.md`](docs/07-decisiones-abiertas.md).
 
 ```bash
 npm install -g firebase-tools   # si no lo tienes
