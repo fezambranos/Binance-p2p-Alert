@@ -13,7 +13,8 @@ const { TradingEngine, initialState } = require("./engine");
 
 function statePath(config) {
     const suffix = config.mode === "live" ? (config.testnet ? "testnet" : "live") : "paper";
-    return path.join(__dirname, "..", "state", `${suffix}.json`);
+    const variant = config.variantName ? `-${config.variantName}` : "";
+    return path.join(__dirname, "..", "state", `${suffix}${variant}.json`);
 }
 
 function loadState(file) {
@@ -28,7 +29,12 @@ function saveState(file, state) {
     fs.renameSync(tmp, file);
 }
 
-async function runLoop({ config, client, broker, log, notify, signal }) {
+/**
+ * refreshDirection(): Promise<{ exposure, probability, validated }>  (Bot 1)
+ * refreshUniverse(): Promise<string[]>                              (Bot 2)
+ * Both are optional; when they fail the previous value is kept.
+ */
+async function runLoop({ config, client, broker, log, notify, signal, refreshDirection, refreshUniverse }) {
     const file = statePath(config);
     const state = loadState(file) || initialState(config);
     const onEvent = (e) => {
@@ -36,26 +42,44 @@ async function runLoop({ config, client, broker, log, notify, signal }) {
         notify(e);
     };
     const engine = new TradingEngine({ config, broker, state, log: onEvent });
-    const symbols = [...new Set([config.regimeSymbol, ...config.symbols].filter(Boolean))];
     state.lastBarClose = state.lastBarClose || {};
+    state.universe = state.universe || config.symbols;
 
-    log({ type: "start", mode: config.mode, testnet: config.testnet, symbols: config.symbols, equity: engine.totalEquity() });
+    log({ type: "start", mode: config.mode, variant: config.variantName, testnet: config.testnet, symbols: state.universe, equity: engine.totalEquity() });
 
     while (!signal?.aborted) {
         const now = Date.now();
         try {
-            for (const symbol of config.symbols) {
+            if (refreshUniverse && isDue(state.universeUpdatedAt, config.scanner.refreshHours, now)) {
+                const universe = await refreshUniverse();
+                if (universe?.length) {
+                    if (broker.loadFilters) await broker.loadFilters(universe);
+                    state.universe = universe;
+                    onEvent({ type: "universe", time: now, symbols: universe });
+                }
+                state.universeUpdatedAt = now;
+            }
+            if (refreshDirection && isDue(state.directionUpdatedAt, config.direction.refreshHours, now)) {
+                const d = await refreshDirection();
+                state.direction = { probability: d.probability, validated: d.validated, reasons: d.validation?.reasons, at: now };
+                engine.setExposure(d.exposure, now, { probability: d.probability, validated: d.validated });
+                state.directionUpdatedAt = now;
+            }
+
+            // Symbols with open positions stay managed even if they left the universe.
+            const traded = [...new Set([...state.universe, ...Object.keys(state.positions)])];
+            for (const symbol of traded) {
                 const price = await client.tickerPrice(symbol);
                 await engine.onPrice(symbol, { open: price, high: price, low: price, close: price }, now);
             }
 
-            for (const symbol of symbols) {
+            for (const symbol of [...new Set([config.regimeSymbol, ...traded].filter(Boolean))]) {
                 const candles = (await client.klines(symbol, config.interval, { limit: 600 })).filter((c) => c.closeTime < now);
                 const lastClose = candles.at(-1)?.closeTime;
                 if (!lastClose || lastClose === state.lastBarClose[symbol]) continue;
                 state.lastBarClose[symbol] = lastClose;
                 if (symbol === config.regimeSymbol) engine.updateRegime(candles);
-                if (config.symbols.includes(symbol)) await engine.onBarClose(symbol, candles, now);
+                if (traded.includes(symbol)) await engine.onBarClose(symbol, candles, now);
             }
         } catch (err) {
             onEvent({ type: "error", time: now, message: err.message });
@@ -64,6 +88,10 @@ async function runLoop({ config, client, broker, log, notify, signal }) {
         await sleep(config.pollSeconds * 1000, signal);
     }
     saveState(file, state);
+}
+
+function isDue(lastAt, hours, now) {
+    return !lastAt || now - lastAt >= hours * 3600 * 1000;
 }
 
 function sleep(ms, signal) {

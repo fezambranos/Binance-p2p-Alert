@@ -28,6 +28,7 @@ function initialState(config) {
         closedTrades: [],
         lockBase: config.initialCapital,
         regimeBullish: true,
+        exposure: 1,
         events: [],
     };
 }
@@ -63,6 +64,13 @@ class TradingEngine {
         this.state.events.push(entry);
         if (this.state.events.length > 200) this.state.events.shift();
         this.log(entry);
+    }
+
+    // Bot 1 output: 1 = full risk, 0.5 = half, 0 = no new longs.
+    setExposure(exposure, time, info = {}) {
+        const previous = Number.isFinite(this.state.exposure) ? this.state.exposure : 1;
+        this.state.exposure = exposure;
+        if (exposure !== previous) this.event("exposure", time, { exposure, previous, ...info });
     }
 
     updateRegime(candles) {
@@ -120,6 +128,7 @@ class TradingEngine {
         const signal = evaluateEntry(candles, this.config.strategy);
         if (!signal.signal) return null;
         if (!this.state.regimeBullish) return null;
+        if (this.state.exposure === 0) return null;
 
         const total = this.totalEquity();
         const tradingEquity = this.tradingEquity();

@@ -7,12 +7,17 @@
  *   node cli.js backtest --synthetic         Offline demo on generated data
  *   node cli.js montecarlo --trades-file backtest-trades.json
  *   node cli.js montecarlo --winrate 0.4 --avgwin 2.5 --avgloss 1
- *   node cli.js paper                        Real prices, simulated orders
+ *   node cli.js direction                    Bot 1: validate + forecast BTC direction
+ *   node cli.js scan                         Bot 2: rank altcoins, print the universe
+ *   node cli.js tournament [--from ...]      Compare strategy variants (holdout test)
+ *   node cli.js backtest --direction         Backtest with Bot 1 controlling exposure
+ *   node cli.js paper [--variant name]       Real prices, simulated orders
  *   node cli.js live --confirm-live          Real orders (needs API keys)
  *   node cli.js status [--mode paper|live]
  *   node cli.js reset-halt [--mode paper|live]
  *
- * Common flags: --config <file>, --capital <usdt>, --testnet
+ * Common flags: --config <file>, --capital <usdt>, --testnet, --variant <name>,
+ *               --no-direction, --no-scanner
  */
 
 const fs = require("node:fs");
@@ -27,6 +32,12 @@ const { createNotifier } = require("./src/notifier");
 const { generateCandles } = require("./src/synthetic");
 const { TradingEngine } = require("./src/engine");
 const risk = require("./src/risk");
+const direction = require("./src/direction");
+const datasources = require("./src/datasources");
+const { scan, selectUniverse } = require("./src/scanner");
+const { runTournament } = require("./src/tournament");
+
+const MARKET_DATA_URL = "https://data-api.binance.vision";
 
 function parseArgs(argv) {
     const args = { _: [] };
@@ -57,7 +68,9 @@ function buildConfig(args, mode) {
     if (args.symbols) overrides.symbols = String(args.symbols).split(",").map((s) => s.trim().toUpperCase());
     if (args.interval) overrides.interval = args.interval;
     if (args.testnet || process.env.BINANCE_TESTNET === "true") overrides.testnet = true;
-    return loadConfig({ file: args.config, overrides });
+    if (args["no-direction"]) overrides.direction = { enabled: false };
+    if (args["no-scanner"]) overrides.scanner = { enabled: false };
+    return loadConfig({ file: args.config, overrides, variant: args.variant });
 }
 
 function printPlan(config) {
@@ -79,6 +92,15 @@ function printPlan(config) {
     if (r.profitLock.enabled) {
         console.log(`\nASEGURAR GANANCIAS\n  Cada +${pct(r.profitLock.triggerGain, 0)} del capital operable → ${pct(r.profitLock.lockFraction, 0)} de esa ganancia pasa a reserva intocable`);
     }
+    const d = config.direction;
+    console.log(`\nBOT 1 — DIRECCIÓN BTC ${d.enabled ? "" : "(desactivado)"}`);
+    console.log(`  P(BTC sube en ${d.horizon} días) → exposición: ${d.bands.map((b) => `≥${pct(b.minProbability, 0)} x${b.exposure}`).join(" · ")}`);
+    console.log(`  Solo actúa si supera la validación walk-forward (${d.simulations} simulaciones, p<0,05, gana a 'siempre alcista', estable)`);
+    const sc = config.scanner;
+    console.log(`\nBOT 2 — SELECCIÓN DE ALTCOINS ${sc.enabled ? "" : "(desactivado)"}`);
+    console.log(`  Universo: ${sc.core.join(", ")} + top ${sc.topN} (score ≥ ${sc.minScore}), refresco cada ${sc.refreshHours} h`);
+    console.log(`  Pesos: ${Object.entries(sc.weights).map(([k, v]) => `${k} ${pct(v, 0)}`).join(" · ")}`);
+    console.log(`  Pérdida de efectividad: si los últimos ${r.alphaDecay.window} trades rinden < ${r.alphaDecay.minExpectancyR}R → riesgo x${r.alphaDecay.multiplier}`);
     const s = config.strategy;
     console.log(`\nESTRATEGIA (${config.interval}, spot, solo largos) en ${config.symbols.join(", ")}`);
     console.log(`  Entrada: cierre > EMA${s.emaSlow}, EMA${s.emaFast} > EMA${s.emaSlow}, ruptura del máximo de ${s.breakoutLookback} velas, ${config.regimeSymbol} sobre su EMA${s.emaSlow}`);
@@ -104,8 +126,9 @@ function printMonteCarlo(res, initial) {
     console.log(`  Drawdown máximo: mediana ${pct(res.medianMaxDrawdown)} · p95 ${pct(res.p95MaxDrawdown)}\n`);
 }
 
-async function loadHistory(config, symbols, from, to, dataDir) {
-    const client = new BinanceClient({ baseUrl: "https://data-api.binance.vision" });
+async function loadHistory(config, symbols, from, to, dataDir, interval = config.interval) {
+    config = { ...config, interval };
+    const client = new BinanceClient({ baseUrl: MARKET_DATA_URL });
     const data = {};
     fs.mkdirSync(dataDir, { recursive: true });
     for (const symbol of symbols) {
@@ -121,24 +144,34 @@ async function loadHistory(config, symbols, from, to, dataDir) {
     return data;
 }
 
-async function cmdBacktest(args) {
-    const config = buildConfig(args, "backtest");
-    let data;
-    let regimeCandles;
+async function loadBacktestData(args, config) {
     if (args.synthetic) {
         const step = INTERVAL_MS[config.interval];
-        data = Object.fromEntries(config.symbols.map((s, i) => [s, generateCandles({ bars: 4000, intervalMs: step, seed: i + 1 })]));
-        regimeCandles = data[config.regimeSymbol] || data[config.symbols[0]];
+        const data = Object.fromEntries(config.symbols.map((s, i) => [s, generateCandles({ bars: 4000, intervalMs: step, seed: i + 1 })]));
         console.log("⚠️  Datos SINTÉTICOS: sirve para probar el sistema, no para validar la estrategia.");
-    } else {
-        const from = args.from || "2021-01-01";
-        const to = args.to || new Date().toISOString().slice(0, 10);
-        const all = await loadHistory(config, [...new Set([config.regimeSymbol, ...config.symbols])], from, to, path.join(__dirname, "data"));
-        data = Object.fromEntries(config.symbols.map((s) => [s, all[s]]));
-        regimeCandles = all[config.regimeSymbol];
+        return { data, regimeCandles: data[config.regimeSymbol] || data[config.symbols[0]] };
     }
+    const from = args.from || "2021-01-01";
+    const to = args.to || new Date().toISOString().slice(0, 10);
+    const all = await loadHistory(config, [...new Set([config.regimeSymbol, ...config.symbols])], from, to, path.join(__dirname, "data"));
+    let exposureAt;
+    if (args.direction) {
+        // Train from well before the backtest so walk-forward forecasts cover it.
+        const btcDaily = (await loadHistory(config, ["BTCUSDT"], "2017-08-17", to, path.join(__dirname, "data"), "1d")).BTCUSDT;
+        const extras = await loadDirectionExtras(config);
+        const dataset = direction.buildDataset(btcDaily, { horizon: config.direction.horizon, extras });
+        const predictions = direction.walkForward(dataset, { minTrain: config.direction.minTrain });
+        const validation = direction.evaluate(predictions, { horizon: config.direction.horizon, simulations: config.direction.simulations });
+        printDirectionValidation(validation);
+        exposureAt = direction.exposureSeries(predictions, config.direction.bands);
+    }
+    return { data: Object.fromEntries(config.symbols.map((s) => [s, all[s]])), regimeCandles: all[config.regimeSymbol], exposureAt };
+}
 
-    const { engine, metrics, equityCurve } = await runBacktest({ config, data, regimeCandles });
+async function cmdBacktest(args) {
+    const config = buildConfig(args, "backtest");
+    const { data, regimeCandles, exposureAt } = await loadBacktestData(args, config);
+    const { engine, metrics, equityCurve } = await runBacktest({ config, data, regimeCandles, exposureAt });
     printMetrics(metrics);
 
     const tradesFile = args["save-trades"] || path.join(__dirname, "backtest-trades.json");
@@ -147,6 +180,20 @@ async function cmdBacktest(args) {
         fs.writeFileSync(args["save-equity"], "time,equity,reserve\n" + equityCurve.map((p) => `${new Date(p.time).toISOString()},${p.equity.toFixed(2)},${p.reserve.toFixed(2)}`).join("\n"));
     }
     console.log(`Trades guardados en ${tradesFile} (úsalo con: node cli.js montecarlo --trades-file ${path.basename(tradesFile)})`);
+}
+
+async function cmdTournament(args) {
+    const config = buildConfig(args, "backtest");
+    const { data, regimeCandles, exposureAt } = await loadBacktestData(args, config);
+    const variants = args.variants ? String(args.variants).split(",") : undefined;
+    const t = await runTournament({ config, data, regimeCandles, exposureAt, windows: Number(args.windows ?? 6), variants });
+    const split = t.results[0]?.splitTime;
+    console.log(`\nTORNEO DE VARIANTES — se elige en el periodo de entrenamiento, se juzga en el reservado (desde ${split ? new Date(split).toISOString().slice(0, 10) : "?"})\n`);
+    console.log("  variante        entreno ret/DD      reservado ret/DD    ventanas +   peor ventana  trades");
+    for (const r of t.results) {
+        console.log(`  ${r.name.padEnd(14)}  ${pct(r.inSample.ret).padStart(8)} / ${pct(r.inSample.maxDrawdown).padStart(6)}   ${pct(r.holdout.ret).padStart(8)} / ${pct(r.holdout.maxDrawdown).padStart(6)}   ${pct(r.positiveWindows, 0).padStart(6)}     ${pct(r.worstWindow).padStart(8)}     ${r.metrics.trades}`);
+    }
+    console.log(`\n  Ganadora en entrenamiento: ${t.winner}. En el periodo reservado ${t.winnerHoldsUp ? "SE SOSTIENE ✅" : "NO se sostiene ❌ (probable sobreajuste o cambio de mercado)"}\n`);
 }
 
 function cmdMonteCarlo(args) {
@@ -172,8 +219,75 @@ function cmdMonteCarlo(args) {
     printMonteCarlo(res, config.initialCapital);
 }
 
+async function loadDirectionExtras(config) {
+    const extras = {};
+    if (config.direction.useFunding) {
+        extras.funding = await datasources.binanceFunding().catch((err) => {
+            console.log(`(funding no disponible: ${err.message})`);
+            return {};
+        });
+    }
+    if (config.direction.useFearGreed) {
+        extras.fearGreed = await datasources.fearGreedHistory().catch((err) => {
+            console.log(`(Fear & Greed no disponible: ${err.message})`);
+            return {};
+        });
+    }
+    return extras;
+}
+
+async function directionForecast(config) {
+    const to = new Date().toISOString().slice(0, 10);
+    const client = new BinanceClient({ baseUrl: MARKET_DATA_URL });
+    const candles = await fetchHistory(client, "BTCUSDT", "1d", Date.parse("2017-08-17"), Date.parse(to) + 24 * 3600 * 1000);
+    const closed = candles.filter((c) => c.closeTime < Date.now());
+    return direction.forecast(closed, config.direction, await loadDirectionExtras(config));
+}
+
+function printDirectionValidation(v) {
+    if (!v.n) return console.log("\nBot 1: sin datos suficientes para validar.\n");
+    console.log(`\nBOT 1 — VALIDACIÓN WALK-FORWARD (${v.n} periodos independientes)`);
+    console.log(`  Precisión del modelo ${pct(v.accuracy)} vs 'siempre alcista' ${pct(v.baselineAccuracy)} (BTC subió en ${pct(v.upRate)} de los periodos)`);
+    console.log(`  p-valor ${v.pValue.toFixed(4)} con ${v.simulations} simulaciones de predictores al azar`);
+    console.log(`  Brier ${v.brier.toFixed(4)} vs tasa base ${v.baselineBrier.toFixed(4)} (menor = mejores probabilidades)`);
+    console.log(`  Operarlo (largo si p>50%, liquidez si no): ${pct(v.strategyReturn)} vs comprar y mantener ${pct(v.holdReturn)}`);
+    console.log(v.passed ? "  ✅ Supera la validación: puede ajustar la exposición." : `  ❌ No supera la validación: ${v.reasons.join("; ")}. No influirá en el riesgo.`);
+}
+
+async function cmdDirection(args) {
+    const config = buildConfig(args);
+    const f = await directionForecast(config);
+    if (f.validation) printDirectionValidation(f.validation);
+    if (f.probability == null) return console.log(`Sin pronóstico: ${f.reasons.join("; ")}`);
+    console.log(`\n  Variables: ${f.features.join(", ")}`);
+    console.log(`  P(BTC más alto en ${config.direction.horizon} días) = ${pct(f.probability)} → exposición x${f.exposure}${f.validated ? "" : " (modelo no validado: sin efecto)"}\n`);
+}
+
+async function scanUniverse(config) {
+    const client = new BinanceClient({ baseUrl: MARKET_DATA_URL });
+    const result = await scan({ client, cfg: config.scanner, quoteAsset: config.quoteAsset });
+    return { ...result, universe: selectUniverse(result.ranked, config.scanner) };
+}
+
+async function cmdScan(args) {
+    const config = buildConfig(args);
+    const { ranked, rejected, universe } = await scanUniverse(config);
+    console.log(`\nBOT 2 — RANKING DE ALTCOINS (${ranked.length} candidatas, ${rejected.length} descartadas)\n`);
+    console.log("  #   par            score  moment. valorac. uso    dilución liquidez");
+    ranked.slice(0, Number(args.top ?? 20)).forEach((r, i) => {
+        const c = r.components;
+        console.log(`  ${String(i + 1).padStart(2)}  ${r.binanceSymbol.padEnd(13)} ${r.score.toFixed(2)}   ${c.momentum.toFixed(2)}    ${c.valuation.toFixed(2)}     ${c.usage.toFixed(2)}   ${c.dilution.toFixed(2)}     ${c.liquidity.toFixed(2)}`);
+    });
+    const reasons = {};
+    for (const r of rejected) reasons[r.reason] = (reasons[r.reason] || 0) + 1;
+    console.log(`\n  Descartes: ${Object.entries(reasons).map(([k, v]) => `${k} (${v})`).join(", ")}`);
+    console.log(`  Universo a operar: ${universe.join(", ")}\n`);
+    fs.mkdirSync(path.join(__dirname, "state"), { recursive: true });
+    fs.writeFileSync(path.join(__dirname, "state", "watchlist.json"), JSON.stringify({ at: new Date().toISOString(), universe, ranked: ranked.slice(0, 30) }, null, 2));
+}
+
 function makeLogger(config) {
-    const logFile = path.join(__dirname, "state", `${config.mode}.log`);
+    const logFile = path.join(__dirname, "state", `${config.mode}${config.variantName ? `-${config.variantName}` : ""}.log`);
     fs.mkdirSync(path.dirname(logFile), { recursive: true });
     return (entry) => {
         const line = JSON.stringify({ at: new Date().toISOString(), ...entry });
@@ -200,7 +314,7 @@ async function cmdRun(args, mode) {
             testnet: config.testnet,
         });
         broker = new LiveBroker({ client, quoteAsset: config.quoteAsset, feeRate: config.feeRate, log });
-        await broker.loadFilters(config.symbols);
+        await broker.loadFilters([...new Set([...config.symbols, ...config.scanner.core])]);
         const account = await client.account();
         const free = Number(account.balances.find((b) => b.asset === config.quoteAsset)?.free || 0);
         log({ type: "balance", asset: config.quoteAsset, free });
@@ -215,7 +329,16 @@ async function cmdRun(args, mode) {
     const controller = new AbortController();
     process.on("SIGINT", () => controller.abort());
     process.on("SIGTERM", () => controller.abort());
-    await runLoop({ config, client: publicClient, broker, log, notify, signal: controller.signal });
+    await runLoop({
+        config,
+        client: publicClient,
+        broker,
+        log,
+        notify,
+        signal: controller.signal,
+        refreshDirection: config.direction.enabled ? () => directionForecast(config) : undefined,
+        refreshUniverse: config.scanner.enabled ? async () => (await scanUniverse(config)).universe : undefined,
+    });
     log({ type: "stop" });
 }
 
@@ -265,6 +388,9 @@ async function main() {
         case "plan": return printPlan(buildConfig(args));
         case "backtest": return cmdBacktest(args);
         case "montecarlo": return cmdMonteCarlo(args);
+        case "direction": return cmdDirection(args);
+        case "scan": return cmdScan(args);
+        case "tournament": return cmdTournament(args);
         case "paper": return cmdRun(args, "paper");
         case "live": return cmdRun(args, "live");
         case "status": return cmdStatus(args);

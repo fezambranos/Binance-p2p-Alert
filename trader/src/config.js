@@ -66,7 +66,55 @@ const DEFAULTS = {
         // Every time trading equity grows `triggerGain` over its base, move
         // `lockFraction` of that gain to a reserve the bot never trades.
         profitLock: { enabled: true, triggerGain: 0.5, lockFraction: 0.3 },
+        // Recent trades losing money → cut risk even if the long history is fine.
+        alphaDecay: { window: 20, minExpectancyR: 0, multiplier: 0.5 },
         minNotional: 10,
+    },
+
+    // Bot 1: BTC direction. Only influences risk if it passes validation.
+    direction: {
+        enabled: true,
+        horizon: 7,
+        minTrain: 540,
+        simulations: 3000,
+        requireValidation: true,
+        useFunding: true,
+        useFearGreed: true,
+        refreshHours: 24,
+        // Exposure multiplier by P(BTC higher in `horizon` days), first match wins.
+        bands: [
+            { minProbability: 0.55, exposure: 1 },
+            { minProbability: 0.45, exposure: 0.5 },
+            { minProbability: 0, exposure: 0 },
+        ],
+    },
+
+    // Bot 2: altcoin scanner. The trading universe = core + topN best-ranked.
+    scanner: {
+        enabled: true,
+        core: ["BTCUSDT", "ETHUSDT"],
+        topN: 4,
+        minScore: 0.5,
+        minMarketCap: 300e6,
+        minQuoteVolume: 10e6,
+        minCirculatingRatio: 0.35,
+        missingScore: 0.25,
+        refreshHours: 168,
+        weights: { momentum: 0.35, valuation: 0.25, usage: 0.15, dilution: 0.15, liquidity: 0.1 },
+    },
+
+    // Strategy variants for `tournament` and parallel paper trading (`--variant`).
+    variants: {
+        base: {},
+        rapida: { strategy: { breakoutLookback: 10, trailAtr: 2.5, stopAtr: 1.5 } },
+        lenta: { strategy: { breakoutLookback: 55, trailAtr: 4, emaFast: 100 } },
+        sin_parcial: { strategy: { partialFraction: 0 } },
+        conservadora: { risk: { tiers: [
+            { name: "Guerrilla", upTo: 1000, riskPerTrade: 0.015, maxOpenPositions: 2 },
+            { name: "Expansión", upTo: 2500, riskPerTrade: 0.0125, maxOpenPositions: 3 },
+            { name: "Consolidación", upTo: 5000, riskPerTrade: 0.01, maxOpenPositions: 3 },
+            { name: "Preservación", upTo: null, riskPerTrade: 0.0075, maxOpenPositions: 4 },
+        ] } },
     },
 };
 
@@ -83,7 +131,14 @@ function deepMerge(base, override) {
     return out;
 }
 
-function loadConfig({ file, overrides = {} } = {}) {
+function applyVariant(config, name) {
+    if (!name) return config;
+    const variant = config.variants?.[name];
+    if (!variant) throw new Error(`Variante desconocida: ${name} (disponibles: ${Object.keys(config.variants || {}).join(", ")})`);
+    return { ...deepMerge(config, variant), variantName: name };
+}
+
+function loadConfig({ file, overrides = {}, variant } = {}) {
     let fromFile = {};
     const candidate = file || path.join(__dirname, "..", "config.json");
     if (fs.existsSync(candidate)) {
@@ -91,7 +146,7 @@ function loadConfig({ file, overrides = {} } = {}) {
     } else if (file) {
         throw new Error(`Config file not found: ${file}`);
     }
-    return deepMerge(deepMerge(DEFAULTS, fromFile), overrides);
+    return applyVariant(deepMerge(deepMerge(DEFAULTS, fromFile), overrides), variant);
 }
 
-module.exports = { DEFAULTS, deepMerge, loadConfig };
+module.exports = { DEFAULTS, deepMerge, loadConfig, applyVariant };

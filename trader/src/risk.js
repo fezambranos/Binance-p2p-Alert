@@ -66,10 +66,27 @@ function effectiveRisk(state, totalEquity, riskCfg) {
     }
 
     const drawdown = drawdownOf(state, totalEquity);
-    const multiplier = drawdownMultiplier(drawdown, riskCfg.drawdownThrottle);
+    let multiplier = drawdownMultiplier(drawdown, riskCfg.drawdownThrottle);
     if (multiplier < 1) notes.push(`drawdown ${(drawdown * 100).toFixed(1)}%: riesgo x${multiplier}`);
 
-    return { pct: base * multiplier, tier, drawdown, multiplier, notes, stats };
+    const decay = alphaDecay(state.closedTrades || [], riskCfg.alphaDecay);
+    if (decay.decaying) {
+        multiplier *= riskCfg.alphaDecay.multiplier;
+        notes.push(`pérdida de efectividad: ${decay.expectancyR.toFixed(2)}R en los últimos ${decay.window} trades`);
+    }
+
+    const exposure = Number.isFinite(state.exposure) ? state.exposure : 1;
+    if (exposure < 1) notes.push(`Bot 1 (dirección): exposición x${exposure}`);
+
+    return { pct: base * multiplier * exposure, tier, drawdown, multiplier, exposure, decay, notes, stats };
+}
+
+// Alpha decay: the recent trades stopped paying even if the long history still does.
+function alphaDecay(trades, cfg) {
+    if (!cfg || trades.length < cfg.window) return { decaying: false };
+    const recent = trades.slice(-cfg.window).map((t) => t.r).filter(Number.isFinite);
+    const expectancyR = recent.reduce((a, b) => a + b, 0) / recent.length;
+    return { decaying: expectancyR < cfg.minExpectancyR, expectancyR, window: cfg.window };
 }
 
 // Rolls the daily window, tracks the peak and trips the kill switch.
@@ -166,6 +183,7 @@ module.exports = {
     drawdownMultiplier,
     kellyStats,
     effectiveRisk,
+    alphaDecay,
     updateEquity,
     canOpen,
     sizePosition,

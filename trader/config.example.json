@@ -78,6 +78,108 @@
       "triggerGain": 0.5,
       "lockFraction": 0.3
     },
+    "alphaDecay": {
+      "window": 20,
+      "minExpectancyR": 0,
+      "multiplier": 0.5
+    },
     "minNotional": 10
+  },
+  "direction": {
+    "enabled": true,
+    "horizon": 7,
+    "minTrain": 540,
+    "simulations": 3000,
+    "requireValidation": true,
+    "useFunding": true,
+    "useFearGreed": true,
+    "refreshHours": 24,
+    "bands": [
+      {
+        "minProbability": 0.55,
+        "exposure": 1
+      },
+      {
+        "minProbability": 0.45,
+        "exposure": 0.5
+      },
+      {
+        "minProbability": 0,
+        "exposure": 0
+      }
+    ]
+  },
+  "scanner": {
+    "enabled": true,
+    "core": [
+      "BTCUSDT",
+      "ETHUSDT"
+    ],
+    "topN": 4,
+    "minScore": 0.5,
+    "minMarketCap": 300000000,
+    "minQuoteVolume": 10000000,
+    "minCirculatingRatio": 0.35,
+    "missingScore": 0.25,
+    "refreshHours": 168,
+    "weights": {
+      "momentum": 0.35,
+      "valuation": 0.25,
+      "usage": 0.15,
+      "dilution": 0.15,
+      "liquidity": 0.1
+    }
+  },
+  "variants": {
+    "base": {},
+    "rapida": {
+      "strategy": {
+        "breakoutLookback": 10,
+        "trailAtr": 2.5,
+        "stopAtr": 1.5
+      }
+    },
+    "lenta": {
+      "strategy": {
+        "breakoutLookback": 55,
+        "trailAtr": 4,
+        "emaFast": 100
+      }
+    },
+    "sin_parcial": {
+      "strategy": {
+        "partialFraction": 0
+      }
+    },
+    "conservadora": {
+      "risk": {
+        "tiers": [
+          {
+            "name": "Guerrilla",
+            "upTo": 1000,
+            "riskPerTrade": 0.015,
+            "maxOpenPositions": 2
+          },
+          {
+            "name": "Expansión",
+            "upTo": 2500,
+            "riskPerTrade": 0.0125,
+            "maxOpenPositions": 3
+          },
+          {
+            "name": "Consolidación",
+            "upTo": 5000,
+            "riskPerTrade": 0.01,
+            "maxOpenPositions": 3
+          },
+          {
+            "name": "Preservación",
+            "upTo": null,
+            "riskPerTrade": 0.0075,
+            "maxOpenPositions": 4
+          }
+        ]
+      }
+    }
   }
 }

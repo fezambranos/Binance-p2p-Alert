@@ -32,7 +32,25 @@ test("effective risk: phase risk, cut by drawdown", () => {
 test("effective risk drops to the floor when history shows no edge", () => {
     const trades = Array.from({ length: 40 }, (_, i) => ({ r: i % 4 === 0 ? 1 : -1 }));
     const eff = risk.effectiveRisk(baseState({ closedTrades: trades }), 500, cfg);
-    assert.equal(eff.pct, cfg.kelly.noEdgeRisk);
+    // Recent trades also lose money, so alpha decay halves it again.
+    assert.equal(eff.decay.decaying, true);
+    assert.equal(eff.pct, cfg.kelly.noEdgeRisk * cfg.alphaDecay.multiplier);
+});
+
+test("alpha decay cuts risk when the last trades stop paying", () => {
+    const history = [
+        ...Array.from({ length: 30 }, () => ({ r: 3 })),
+        ...Array.from({ length: 20 }, () => ({ r: -1 })),
+    ];
+    const eff = risk.effectiveRisk(baseState({ closedTrades: history }), 500, cfg);
+    assert.equal(eff.decay.decaying, true);
+    assert.ok(Math.abs(eff.pct - 0.03 * cfg.alphaDecay.multiplier) < 1e-12);
+    assert.equal(risk.alphaDecay(history.slice(0, 10), cfg.alphaDecay).decaying, false);
+});
+
+test("Bot 1 exposure scales risk", () => {
+    assert.ok(Math.abs(risk.effectiveRisk(baseState({ exposure: 0.5 }), 500, cfg).pct - 0.015) < 1e-12);
+    assert.equal(risk.effectiveRisk(baseState({ exposure: 0 }), 500, cfg).pct, 0);
 });
 
 test("effective risk capped by half Kelly with a small edge", () => {

@@ -10,6 +10,92 @@ Sin dependencias (Node 22+). Mismo motor para backtest, paper y dinero real.
 > backtest con datos reales → Monte Carlo → paper trading 4–8 semanas →
 > testnet → real con el capital que aceptes perder.
 
+## Arquitectura: 3 bots + validación continua
+
+```
+ Bot 1 · Dirección BTC ──► exposición x1 / x0,5 / x0 ─┐
+ Bot 2 · Selección altcoins ──► universo a operar ────┼──► Bot 3 · Riesgo + ejecución (Binance Spot)
+ Torneo de variantes · detector de pérdida de efectividad ┘
+```
+
+**Bot 1 — dirección de BTC** (`src/direction.js`, `node cli.js direction`).
+Regresión logística sobre variables diarias: momentum a 7/30/90 días,
+distancia a EMA50/EMA200, régimen de volatilidad, distancia al máximo anual,
+RSI, *funding rate* de los perpetuos (posicionamiento apalancado) y el índice
+Fear & Greed (sentimiento). Da P(BTC más alto en 7 días). **Solo puede tocar
+el riesgo si supera la validación**:
+
+- *Walk-forward*: cada predicción la hace un modelo entrenado solo con datos
+  que ya existían en ese momento.
+- Tiene que ganarle a "predecir siempre subida" por ≥ 2 puntos. BTC sube en
+  más de la mitad de las semanas, así que "58 %" puede ser solo esa base.
+- Significancia con miles de simulaciones Monte Carlo de predictores al azar
+  (p < 0,05), sobre periodos que no se solapan.
+- Estabilidad: la ventaja tiene que aparecer en las dos mitades del periodo.
+  En los tests, series de puro ruido pasan esta validación ~2,5 % de las veces.
+
+Si pasa: P ≥ 55 % → exposición completa; 45–55 % → mitad; < 45 % → no abre
+largos nuevos. Si no pasa, no influye y manda el filtro de tendencia de BTC.
+
+**Bot 2 — selección de altcoins** (`src/scanner.js`, `node cli.js scan`).
+Solo datos crudos y auditables, sin noticias ni influencers:
+
+| Componente | Dato | Fuente | Peso |
+|---|---|---|---|
+| Momentum | fuerza relativa vs BTC a 30 y 90 días | Binance | 35 % |
+| Valoración | comisiones anualizadas / capitalización (tipo P/E) | DefiLlama | 25 % |
+| Uso | variación del TVL a 30 días | DefiLlama | 15 % |
+| Dilución | capitalización / FDV (supply por desbloquear) | CoinGecko | 15 % |
+| Liquidez | volumen 24 h en Binance | Binance | 10 % |
+
+Descarta antes: stablecoins, tokens envueltos o en *staking*, capitalización
+< 300 M, volumen < 10 M, capitalización/FDV < 35 % y lo que no cotiza en
+Binance. Sin fundamentales verificables → puntuación baja (no tener datos no
+es una buena noticia). Universo = BTC + ETH + las 4 mejores, recalculado cada
+semana.
+
+**Bot 3 — riesgo y ejecución**: todo lo descrito abajo (fases, frenos, Kelly,
+reserva), más la exposición de Bot 1 y el detector de **pérdida de
+efectividad**: si los últimos 20 trades tienen expectativa negativa, el riesgo
+baja a la mitad aunque el historial largo sea bueno.
+
+**Torneo** (`node cli.js tournament`): prueba 5 variantes (`base`, `rapida`,
+`lenta`, `sin_parcial`, `conservadora`, editables en `config.json`). La
+ganadora se elige **solo** con el primer 70 % del historial y se juzga en el
+30 % final que no vio. Si no se sostiene ahí, era suerte o sobreajuste.
+Para correrlas en paralelo en paper: `node cli.js paper --variant rapida`
+en otra terminal (cada variante tiene su propio estado y log).
+
+### ¿Por qué Binance y no una L2 (Base, Robinhood Chain)?
+
+La premisa es correcta frente a Ethereum mainnet, pero la comparación
+relevante es con un exchange centralizado:
+
+| | Binance Spot | DEX en Base |
+|---|---|---|
+| Comisión | 0,1 % (0,075 % con BNB) | 0,05–0,3 % del pool + gas (céntimos) + slippage |
+| Stop loss en el exchange | Sí, queda protegido si el bot se cae | No existe nativo: depende de que el bot esté vivo |
+| MEV / *sandwich* | No | Sí, en swaps sin protección |
+| Riesgos extra | Custodia del exchange | Contratos, puentes, tokens *rug*, aprobaciones |
+| Activos | Top ~400 con liquidez profunda | Muchos tokens solo on-chain, mayoría ilíquidos |
+
+Con 400–500 USDT, Binance es igual o más barato y bastante más seguro para
+BTC, ETH y altcoins grandes. Una L2 solo aporta si la ventaja está en tokens
+que **no** cotizan en exchanges centralizados, que es el segmento de mayor
+riesgo. El broker es intercambiable (`src/brokers.js`), así que se puede
+añadir un adaptador para Base más adelante sin tocar el resto. Robinhood Chain
+conviene verificar su estado actual antes de planear sobre ella. Tampoco hace
+falta gastar 100 USDT en herramientas: todas las fuentes de datos de este
+sistema son gratuitas.
+
+### Límites que hay que conocer
+
+- El backtest usa un universo fijo (`symbols`). No se puede backtestear Bot 2
+  con honestidad sin datos fundamentales "tal como eran" en cada fecha
+  (sesgo de supervivencia). Valídalo en paper.
+- Probar muchas variantes y quedarse con la mejor siempre da un backtest
+  bonito. Por eso existe el periodo reservado; respétalo.
+
 ## La lógica: "guerrilla informada"
 
 1. **Riesgo por fases.** Con poco capital, perder 500 USDT es recuperable y el
@@ -56,7 +142,7 @@ Sin dependencias (Node 22+). Mismo motor para backtest, paper y dinero real.
 
 ```bash
 cd trader
-npm test                                   # 42 tests
+npm test                                   # 62 tests
 node cli.js plan                           # ver reglas de riesgo activas
 
 # 1) Backtest con datos reales (descarga velas públicas de Binance y las cachea en data/)
@@ -68,8 +154,20 @@ node cli.js montecarlo --trades-file backtest-trades.json --trades 200
 #    ...o con supuestos propios
 node cli.js montecarlo --winrate 0.38 --avgwin 2.8 --avgloss 1
 
+# Bot 1: ¿el modelo de dirección tiene ventaja real? + pronóstico actual
+node cli.js direction
+node cli.js backtest --from 2021-01-01 --direction      # backtest con Bot 1 ajustando la exposición
+
+# Bot 2: ranking de altcoins y universo resultante (se guarda en state/watchlist.json)
+node cli.js scan
+
+# Torneo de variantes con periodo reservado
+node cli.js tournament --from 2020-01-01 [--direction]
+
 # 3) Paper trading: precios reales, órdenes simuladas (déjalo corriendo semanas)
-node cli.js paper
+node cli.js paper                          # con Bot 1 y Bot 2 activos
+node cli.js paper --variant lenta          # otra variante en paralelo, en otra terminal
+node cli.js paper --no-scanner             # universo fijo de config.symbols
 node cli.js status
 
 # 4) Testnet de Binance (claves de https://testnet.binance.vision)
@@ -124,5 +222,8 @@ Para dejarlo corriendo 24/7 usa un VPS pequeño con `pm2` o `systemd`
 - `src/engine.js` — motor común (contabilidad, entradas, salidas).
 - `src/brokers.js` — broker simulado y broker real de Binance.
 - `src/binance.js` — cliente REST firmado de Binance Spot.
+- `src/direction.js` — Bot 1: modelo de dirección y su validación.
+- `src/scanner.js`, `src/datasources.js` — Bot 2: ranking de altcoins y fuentes públicas.
+- `src/tournament.js` — comparación de variantes con periodo reservado.
 - `src/backtest.js`, `src/montecarlo.js` — validación.
 - `src/runner.js` — bucle de paper/live con estado persistente.

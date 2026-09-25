@@ -4,13 +4,14 @@
  * Replays historical candles through the same TradingEngine used live, with
  * a SimulatedBroker (fees + slippage). Stops are assumed to hit before
  * take-profits when both fall inside the same candle (conservative).
+ * `exposureAt(time)` optionally plugs in Bot 1's walk-forward forecasts.
  */
 
 const { TradingEngine } = require("./engine");
 const { SimulatedBroker } = require("./brokers");
 const { kellyStats } = require("./risk");
 
-async function runBacktest({ config, data, regimeCandles }) {
+async function runBacktest({ config, data, regimeCandles, exposureAt }) {
     const broker = new SimulatedBroker({ feeRate: config.feeRate, slippage: config.slippage });
     const engine = new TradingEngine({ config, broker });
     const window = Math.max(config.strategy.emaSlow * 3, 300);
@@ -24,6 +25,7 @@ async function runBacktest({ config, data, regimeCandles }) {
 
     const equityCurve = [];
     for (const time of timeline) {
+        if (exposureAt) engine.setExposure(exposureAt(time), time);
         if (regimeIndex?.has(time)) {
             const i = regimeIndex.get(time);
             engine.updateRegime(regimeCandles.slice(Math.max(0, i - window + 1), i + 1));
