@@ -1,0 +1,83 @@
+{
+  "testnet": false,
+  "quoteAsset": "USDT",
+  "symbols": [
+    "BTCUSDT",
+    "ETHUSDT",
+    "SOLUSDT",
+    "BNBUSDT"
+  ],
+  "regimeSymbol": "BTCUSDT",
+  "interval": "4h",
+  "initialCapital": 500,
+  "feeRate": 0.001,
+  "slippage": 0.0005,
+  "pollSeconds": 60,
+  "strategy": {
+    "emaFast": 50,
+    "emaSlow": 200,
+    "breakoutLookback": 20,
+    "atrPeriod": 14,
+    "stopAtr": 2,
+    "trailAtr": 3,
+    "partialTakeR": 2,
+    "partialFraction": 0.5,
+    "minAtrPct": 0.005,
+    "maxAtrPct": 0.08
+  },
+  "risk": {
+    "tiers": [
+      {
+        "name": "Guerrilla",
+        "upTo": 1000,
+        "riskPerTrade": 0.03,
+        "maxOpenPositions": 2
+      },
+      {
+        "name": "Expansión",
+        "upTo": 2500,
+        "riskPerTrade": 0.025,
+        "maxOpenPositions": 3
+      },
+      {
+        "name": "Consolidación",
+        "upTo": 5000,
+        "riskPerTrade": 0.02,
+        "maxOpenPositions": 3
+      },
+      {
+        "name": "Preservación",
+        "upTo": null,
+        "riskPerTrade": 0.01,
+        "maxOpenPositions": 4
+      }
+    ],
+    "maxTotalOpenRisk": 0.08,
+    "maxPositionPct": 0.6,
+    "drawdownThrottle": [
+      {
+        "drawdown": 0.1,
+        "multiplier": 0.5
+      },
+      {
+        "drawdown": 0.2,
+        "multiplier": 0.25
+      }
+    ],
+    "haltDrawdown": 0.3,
+    "dailyLossLimit": 0.06,
+    "maxConsecutiveLosses": 4,
+    "cooldownHours": 24,
+    "kelly": {
+      "minTrades": 30,
+      "fraction": 0.5,
+      "noEdgeRisk": 0.005
+    },
+    "profitLock": {
+      "enabled": true,
+      "triggerGain": 0.5,
+      "lockFraction": 0.3
+    },
+    "minNotional": 10
+  }
+}
