@@ -1,0 +1,17 @@
+{
+  "name": "trader",
+  "description": "Automated Binance Spot trend-following bot with capital-phase risk management",
+  "main": "cli.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "plan": "node cli.js plan",
+    "backtest": "node cli.js backtest",
+    "montecarlo": "node cli.js montecarlo",
+    "paper": "node cli.js paper",
+    "status": "node cli.js status"
+  },
+  "private": true
+}

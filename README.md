@@ -9,6 +9,9 @@ que definas. Diseñada para dejarla abierta en el navegador del teléfono.
 - `web/` — página estática (HTML/CSS/JS sin dependencias, PWA instalable).
 - `functions/` — Cloud Function que hace de proxy hacia la API de Binance P2P,
   porque Binance no permite llamarla directo desde el navegador (CORS).
+- `trader/` — bot de trading automatizado para Binance Spot con gestión de
+  riesgo por fases de capital (independiente de la alerta). Ver
+  [`trader/README.md`](trader/README.md).
 
 ## Desplegar
 
